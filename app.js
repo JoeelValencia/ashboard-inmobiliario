@@ -18,7 +18,7 @@ const barrioCoords = {
 document.addEventListener('DOMContentLoaded', () => {
     // Inicializar Mapa
     map = L.map('map').setView([-34.6037, -58.3816], 12);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap', maxZoom: 19
     }).addTo(map);
 
@@ -143,41 +143,40 @@ function renderKanban(data) {
         if(st === 'Pendiente' || st === 'Contactado') pipelineActive += m._comisionPotencial;
         if(st === 'Cerrado') revenueGen += m._comisionPotencial;
 
-        // Limitar renderizado para performance (max 30 por columna visualizados)
         if(counts[st] > 30) return;
 
         const card = document.createElement('div');
-        card.className = "kanban-card bg-zinc-900 border border-zinc-700/50 rounded-lg p-3 shadow-md hover:border-zinc-500 transition-colors";
+        // LIGHT MODE CARD STYLES
+        card.className = "kanban-card bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing";
         
-        // Botones de accion dependiento del estado
         let actionButtons = '';
         if(st === 'Pendiente') {
             actionButtons = `
-                <div class="flex gap-2 mt-3 pt-3 border-t border-zinc-800">
-                    <button onclick="window.actualizarEstado('${m.ID}', 'Contactado ✅', this)" class="flex-1 bg-zinc-800 hover:bg-warning/20 text-warning text-[10px] font-bold py-1.5 rounded transition">EN GESTIÓN</button>
-                    <button onclick="window.actualizarEstado('${m.ID}', 'Descartado ❌', this)" class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-[10px] font-bold py-1.5 rounded transition">DESCARTAR</button>
+                <div class="flex gap-2 mt-4 pt-3 border-t border-gray-100">
+                    <button onclick="window.actualizarEstado('${m.ID}', 'Contactado ✅', this)" class="flex-1 bg-warning/10 hover:bg-warning/20 text-warning text-[11px] font-bold py-2 rounded-lg transition-colors border border-warning/20">CONTACTAR</button>
+                    <button onclick="window.actualizarEstado('${m.ID}', 'Descartado ❌', this)" class="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-500 text-[11px] font-bold py-2 rounded-lg transition-colors border border-gray-200">DESCARTAR</button>
                 </div>
             `;
         } else if(st === 'Contactado') {
             actionButtons = `
-                <div class="flex gap-2 mt-3 pt-3 border-t border-zinc-800">
-                    <button onclick="window.actualizarEstado('${m.ID}', 'Cerrado ✅', this)" class="flex-1 bg-zinc-800 hover:bg-accent/20 text-accent text-[10px] font-bold py-1.5 rounded transition">CERRAR MATCH</button>
-                    <button onclick="window.actualizarEstado('${m.ID}', 'Descartado ❌', this)" class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-[10px] font-bold py-1.5 rounded transition">PERDIDO</button>
+                <div class="flex gap-2 mt-4 pt-3 border-t border-gray-100">
+                    <button onclick="window.actualizarEstado('${m.ID}', 'Cerrado ✅', this)" class="flex-1 bg-success hover:bg-emerald-600 text-white text-[11px] font-bold py-2 rounded-lg transition-colors shadow-sm">GANADA 🎉</button>
+                    <button onclick="window.actualizarEstado('${m.ID}', 'Descartado ❌', this)" class="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-500 text-[11px] font-bold py-2 rounded-lg transition-colors border border-gray-200">PERDIDA</button>
                 </div>
             `;
         }
 
         card.innerHTML = `
             <div class="flex justify-between items-start mb-2">
-                <div class="font-bold text-sm text-zinc-200">Lead ${m['Comprador - Asesor WA']}</div>
-                <div class="text-[10px] font-mono text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/20">$${m._comisionPotencial.toLocaleString()}</div>
+                <div class="font-extrabold text-sm text-gray-900">Lead ${m['Comprador - Asesor WA']}</div>
+                <div class="text-[11px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-full font-bold">USD ${m._comisionPotencial.toLocaleString()}</div>
             </div>
-            <p class="text-xs text-zinc-400 line-clamp-1 mb-1">Busca: ${m['Comprador - Zonas Buscadas']}</p>
-            <div class="flex items-center gap-2 mt-2">
-                <span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                <p class="text-[11px] text-zinc-300 line-clamp-1">${m['Tipo Propiedad']} en <span class="capitalize">${m._barrioLower}</span></p>
+            <p class="text-xs text-gray-500 line-clamp-1 mb-2 font-medium">Busca: ${m['Comprador - Zonas Buscadas']}</p>
+            <div class="flex items-center gap-2 mt-3 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                <span class="w-1.5 h-1.5 rounded-full bg-accent"></span>
+                <p class="text-[11px] text-gray-700 font-semibold line-clamp-1">${m['Tipo Propiedad']} en <span class="capitalize">${m._barrioLower}</span></p>
             </div>
-            <div class="flex justify-between items-center mt-2 text-[10px] text-zinc-500">
+            <div class="flex justify-between items-center mt-3 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
                 <span>Asesor: ${m.Asesor}</span>
                 <span>${m.Fuente}</span>
             </div>
@@ -217,9 +216,8 @@ function renderMap(data) {
                 break;
             }
         }
-        heatData.push([lat, lng, 0.8]);
+        heatData.push([lat, lng, 0.5]);
 
-        // Solo dibujar pines para los activos (para no saturar visualmente)
         if((r._estadoNorm === 'Pendiente' || r._estadoNorm === 'Contactado') && renderCount < 100) {
             renderCount++;
             
@@ -227,21 +225,21 @@ function renderMap(data) {
             urlPublicacion = urlPublicacion.trim();
             if(!urlPublicacion.startsWith('http')) urlPublicacion = 'https://' + urlPublicacion;
 
-            // 1. MARCADOR DEL VENDEDOR (PROPIEDAD)
+            // 1. MARCADOR DEL VENDEDOR (PROPIEDAD) - ZONAPROP STYLE PURPLE
             const propIcon = L.divIcon({
                 className: 'leaflet-div-icon',
-                html: `<div style="background:#3b82f6; color:white; font-weight:bold; font-size:11px; padding:2px 8px; border-radius:4px; border:1px solid #60a5fa; box-shadow:0 4px 6px rgba(0,0,0,0.3); white-space:nowrap; transform: translate(-50%, -100%); mt-2">USD ${(r._precioNum/1000).toFixed(0)}k</div>`,
+                html: `<div style="background:#6422b9; color:white; font-weight:800; font-size:12px; padding:4px 10px; border-radius:6px; border:2px solid white; box-shadow:0 4px 10px rgba(0,0,0,0.15); white-space:nowrap; transform: translate(-50%, -100%);">USD ${(r._precioNum/1000).toFixed(0)}k</div>`,
                 iconSize: [0, 0], iconAnchor: [0, 0]
             });
 
             const propTooltipHTML = `
                 <div class="map-tooltip-card">
-                    <div style="background:#3b82f6; padding:8px 12px; font-weight:bold; font-size:12px;">🏠 Propiedad (Venta)</div>
-                    <div style="padding:12px;">
-                        <div style="font-size:16px; font-weight:bold; margin-bottom:4px;">USD ${r._precioNum.toLocaleString()}</div>
-                        <div style="font-size:12px; color:#a1a1aa; margin-bottom:8px;">${r['Tipo Propiedad']} • ${r['Ambientes Prop.'] || r['Amb'] || '?'} amb • <span style="text-transform:capitalize;">${r._barrioLower}</span></div>
-                        <div style="font-size:10px; padding:4px 8px; background:#27272a; border-radius:4px; display:inline-block;">📍 Origen: ${r.Fuente}</div>
-                        <div style="font-size:10px; color:#3b82f6; margin-top:8px; font-weight:bold;">Clic para ir al aviso original 👉</div>
+                    <div style="background:#6422b9; color:white; padding:10px 14px; font-weight:bold; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">🏠 Propiedad (Venta)</div>
+                    <div style="padding:14px;">
+                        <div style="font-size:18px; font-weight:900; color:#1f2937; margin-bottom:4px;">USD ${r._precioNum.toLocaleString()}</div>
+                        <div style="font-size:13px; color:#6b7280; font-weight:500; margin-bottom:10px;">${r['Tipo Propiedad']} • ${r['Ambientes Prop.'] || r['Amb'] || '?'} amb • <span style="text-transform:capitalize;">${r._barrioLower}</span></div>
+                        <div style="font-size:11px; padding:4px 8px; background:#f3f4f6; color:#4b5563; border-radius:6px; display:inline-block; font-weight:bold;">📍 Origen: ${r.Fuente}</div>
+                        <div style="font-size:11px; color:#ff5a5f; margin-top:12px; font-weight:bold;">Haz clic para ver el aviso original 👉</div>
                     </div>
                 </div>
             `;
@@ -253,23 +251,23 @@ function renderMap(data) {
                 else alert("Esta propiedad no tiene URL de publicación cargada.");
             });
 
-            // 2. MARCADOR DEL COMPRADOR (LEAD) - Ligeramente desplazado
+            // 2. MARCADOR DEL COMPRADOR (LEAD) - ACCENT CORAL
             const leadLat = lat - 0.0008; 
             const leadLng = lng + 0.0005;
 
             const leadIcon = L.divIcon({
                 className: 'leaflet-div-icon',
-                html: `<div style="background:#10b981; color:#064e3b; font-weight:bold; font-size:10px; padding:2px 8px; border-radius:12px; border:1px solid #34d399; box-shadow:0 4px 6px rgba(0,0,0,0.3); white-space:nowrap; transform: translate(-50%, -50%); flex; align-items:center; gap:4px;">👤 Lead ${r['Comprador - Asesor WA']}</div>`,
+                html: `<div style="background:#10b981; color:white; font-weight:bold; font-size:10px; padding:3px 8px; border-radius:12px; border:2px solid white; box-shadow:0 4px 6px rgba(0,0,0,0.1); white-space:nowrap; transform: translate(-50%, -50%); display:flex; align-items:center; gap:4px;">👤 Lead ${r['Comprador - Asesor WA']}</div>`,
                 iconSize: [0, 0], iconAnchor: [0, 0]
             });
 
             const leadTooltipHTML = `
-                <div class="map-tooltip-card" style="border-color: rgba(16, 185, 129, 0.4);">
-                    <div style="background:#10b981; color:#064e3b; padding:8px 12px; font-weight:bold; font-size:12px;">👤 Comprador Activo</div>
-                    <div style="padding:12px;">
-                        <div style="font-size:14px; font-weight:bold; margin-bottom:4px;">Presupuesto: USD ${r['Comprador - Presupuesto']}</div>
-                        <div style="font-size:12px; color:#a1a1aa; margin-bottom:8px;">Busca: ${r['Comprador - Zonas Buscadas']}</div>
-                        <div style="font-size:10px; padding:4px 8px; background:rgba(16,185,129,0.1); color:#10b981; border-radius:4px; display:inline-block; font-weight:bold;">💰 Comis. Potencial: USD ${r._comisionPotencial.toLocaleString()}</div>
+                <div class="map-tooltip-card">
+                    <div style="background:#10b981; color:white; padding:10px 14px; font-weight:bold; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">👤 Comprador Activo</div>
+                    <div style="padding:14px;">
+                        <div style="font-size:14px; font-weight:900; color:#1f2937; margin-bottom:4px;">Presupuesto: USD ${r['Comprador - Presupuesto']}</div>
+                        <div style="font-size:13px; color:#6b7280; font-weight:500; margin-bottom:10px;">Busca: ${r['Comprador - Zonas Buscadas']}</div>
+                        <div style="font-size:11px; padding:4px 8px; background:#ecfdf5; color:#059669; border-radius:6px; display:inline-block; font-weight:bold; border:1px solid #d1fae5;">💰 Comisión: USD ${r._comisionPotencial.toLocaleString()}</div>
                     </div>
                 </div>
             `;
@@ -277,8 +275,7 @@ function renderMap(data) {
             const leadMarker = L.marker([leadLat, leadLng], {icon: leadIcon}).addTo(markersLayer);
             leadMarker.bindTooltip(leadTooltipHTML, { direction: 'bottom', offset: [0, 10], opacity: 1 });
             
-            // Dibujar línea conectora entre Comprador y Propiedad
-            L.polyline([[lat, lng], [leadLat, leadLng]], {color: '#52525b', weight: 1, dashArray: '4, 4'}).addTo(markersLayer);
+            L.polyline([[lat, lng], [leadLat, leadLng]], {color: '#9ca3af', weight: 2, dashArray: '4, 4'}).addTo(markersLayer);
         }
     });
 
@@ -288,12 +285,11 @@ function renderMap(data) {
     const topZonas = document.getElementById('map-zonas-legend');
     topZonas.innerHTML = '';
     topZonasList.forEach(z => {
-        topZonas.innerHTML += `<div class="flex justify-between items-center w-48"><span class="capitalize text-zinc-200">${z[0]}</span><span class="text-primary font-mono">${z[1]}</span></div>`;
+        topZonas.innerHTML += `<div class="flex justify-between items-center w-full mb-1"><span class="capitalize text-gray-700 font-semibold">${z[0]}</span><span class="text-primary font-bold bg-primary/10 px-2 py-0.5 rounded-md">${z[1]}</span></div>`;
     });
 }
 
 function renderAnalytics(data) {
-    // 1. Leaderboard
     const asesores = ['Joel', 'David', 'Vicente', 'Claudia'];
     let stats = {};
     asesores.forEach(a => stats[a] = { pipeline: 0, revenue: 0, wins: 0, total: 0 });
@@ -313,39 +309,40 @@ function renderAnalytics(data) {
     const lbContainer = document.getElementById('leaderboard-container');
     lbContainer.innerHTML = '';
     
-    // Sort by revenue descending
     let sorted = Object.keys(stats).map(k => ({name: k, ...stats[k]})).sort((a,b) => b.revenue - a.revenue);
     
     sorted.forEach((s, idx) => {
-        let rankColor = idx === 0 ? 'text-warning' : 'text-zinc-500';
+        let isFirst = idx === 0;
+        let rankColor = isFirst ? 'text-warning' : 'text-gray-400';
+        let bgClass = isFirst ? 'bg-gradient-to-br from-white to-orange-50 border-orange-200' : 'bg-white border-gray-200';
+        
         lbContainer.innerHTML += `
-            <div class="bg-zinc-800/30 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between">
-                <div class="flex justify-between items-start mb-4">
-                    <div class="flex items-center gap-2">
-                        <div class="w-8 h-8 rounded bg-zinc-700 flex items-center justify-center font-bold text-white">${s.name.charAt(0)}</div>
-                        <span class="font-bold text-zinc-200">${s.name}</span>
+            <div class="${bgClass} border rounded-xl shadow-sm p-6 flex flex-col justify-between transform transition hover:-translate-y-1 hover:shadow-md">
+                <div class="flex justify-between items-start mb-6">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center font-extrabold text-gray-800 text-lg shadow-inner">${s.name.charAt(0)}</div>
+                        <span class="font-extrabold text-gray-900 text-lg">${s.name}</span>
                     </div>
-                    <span class="font-bold ${rankColor}">#${idx+1}</span>
+                    <span class="font-black text-2xl ${rankColor}">#${idx+1}</span>
                 </div>
-                <div class="space-y-2">
-                    <div class="flex justify-between text-xs">
-                        <span class="text-zinc-500">Revenue</span>
-                        <span class="text-accent font-bold font-mono">$${s.revenue.toLocaleString()}</span>
+                <div class="space-y-3">
+                    <div class="flex justify-between text-sm items-center">
+                        <span class="text-gray-500 font-semibold uppercase tracking-wider text-[10px]">Revenue</span>
+                        <span class="text-success font-black text-lg">$${s.revenue.toLocaleString()}</span>
                     </div>
-                    <div class="flex justify-between text-xs">
-                        <span class="text-zinc-500">Pipeline Activo</span>
-                        <span class="text-zinc-300 font-mono">$${s.pipeline.toLocaleString()}</span>
+                    <div class="flex justify-between text-sm items-center">
+                        <span class="text-gray-500 font-semibold uppercase tracking-wider text-[10px]">Pipeline</span>
+                        <span class="text-gray-700 font-bold">$${s.pipeline.toLocaleString()}</span>
                     </div>
-                    <div class="flex justify-between text-xs">
-                        <span class="text-zinc-500">Win Rate</span>
-                        <span class="text-zinc-300 font-mono">${s.total > 0 ? Math.round((s.wins/s.total)*100) : 0}%</span>
+                    <div class="flex justify-between text-sm items-center">
+                        <span class="text-gray-500 font-semibold uppercase tracking-wider text-[10px]">Efectividad</span>
+                        <span class="text-primary font-black bg-primary/10 px-2 py-0.5 rounded-full text-xs">${s.total > 0 ? Math.round((s.wins/s.total)*100) : 0}%</span>
                     </div>
                 </div>
             </div>
         `;
     });
 
-    // 2. Charts
     let fb = 0, ml = 0, zp = 0;
     let counts = { 'Pendiente': 0, 'Contactado': 0, 'Cerrado': 0, 'Descartado': 0 };
     data.forEach(m => {
@@ -357,8 +354,8 @@ function renderAnalytics(data) {
     if (chartFuentes) chartFuentes.destroy();
     chartFuentes = new Chart(document.getElementById('chart-fuentes').getContext('2d'), {
         type: 'doughnut',
-        data: { labels: ['ZonaProp', 'MercadoLibre', 'Facebook'], datasets: [{ data: [zp, ml, fb], backgroundColor: ['#8b5cf6', '#f59e0b', '#3b82f6'], borderColor: '#18181b', borderWidth: 2 }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'bottom', labels: { color: '#a1a1aa' } } } }
+        data: { labels: ['ZonaProp', 'MercadoLibre', 'Facebook'], datasets: [{ data: [zp, ml, fb], backgroundColor: ['#6422b9', '#f59e0b', '#3b82f6'], borderColor: '#ffffff', borderWidth: 3 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: '#4b5563', font: {family: 'Inter', weight: 'bold'} } } } }
     });
 
     if (chartEstados) chartEstados.destroy();
@@ -366,8 +363,8 @@ function renderAnalytics(data) {
         type: 'bar',
         data: { 
             labels: ['Nuevos', 'En Gestión', 'Ganados', 'Perdidos'], 
-            datasets: [{ label: 'Leads', data: [counts['Pendiente'], counts['Contactado'], counts['Cerrado'], counts['Descartado']], backgroundColor: ['#3b82f6', '#f59e0b', '#10b981', '#52525b'], borderRadius: 4 }] 
+            datasets: [{ label: 'Leads', data: [counts['Pendiente'], counts['Contactado'], counts['Cerrado'], counts['Descartado']], backgroundColor: ['#6422b9', '#f59e0b', '#10b981', '#9ca3af'], borderRadius: 6 }] 
         },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { display: false }, x: { grid: { display: false }, ticks: { color: '#a1a1aa' } } }, plugins: { legend: { display: false } } }
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { display: false }, x: { grid: { display: false }, ticks: { color: '#6b7280', font: {family: 'Inter', weight: 'bold'} } } }, plugins: { legend: { display: false } } }
     });
 }
