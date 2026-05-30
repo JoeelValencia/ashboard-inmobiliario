@@ -1,5 +1,6 @@
 // app.js - Conectado a Google Sheets en tiempo real
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRCE8uHbyUCrZKdBOqGRf5OKx2TqMX-z0VJRZ1YQoS4-5szkZ31fJbc6diA2ydxhQdVBn2h0G1hT1hn/pub?output=csv';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxlE_a4It3IueNJuWDACwCVdh-AgNMIgH6RsmVdsQ5e2rNhf4MUdPzYtiRz_FECnrRw/exec';
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log("Iniciando descarga de datos desde Google Sheets...");
@@ -28,6 +29,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+// Función para enviar la actualización a Google Sheets
+window.actualizarEstado = function(id, nuevoEstado, btnElement) {
+    // Feedback visual inmediato
+    const card = btnElement.closest('.tinder-card-item');
+    card.style.opacity = '0.5';
+    card.style.pointerEvents = 'none';
+
+    fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors', // Evita problemas de CORS al escribir
+        cache: 'no-cache',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: id, estado: nuevoEstado })
+    })
+    .then(() => {
+        // Asumimos éxito al usar no-cors
+        card.style.display = 'none';
+        console.log(`Estado actualizado para ${id}: ${nuevoEstado}`);
+    })
+    .catch(error => {
+        console.error("Error actualizando Google Sheets:", error);
+        alert("Hubo un error al actualizar el estado. Intentá de nuevo.");
+        card.style.opacity = '1';
+        card.style.pointerEvents = 'auto';
+    });
+};
 
 function procesarDatos(data, map) {
     // Filtrar filas vacías
@@ -113,7 +141,7 @@ function procesarDatos(data, map) {
     } else {
         pendientes.forEach(m => {
             const card = document.createElement('div');
-            card.className = "flex bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition";
+            card.className = "tinder-card-item flex bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition";
             card.innerHTML = `
                 <div class="flex-1">
                     <div class="flex items-center gap-2 mb-2">
@@ -131,8 +159,8 @@ function procesarDatos(data, map) {
                     </div>
                 </div>
                 <div class="flex flex-col gap-2 justify-center border-l border-gray-100 pl-4 ml-4">
-                    <button onclick="alert('Funcionalidad de escritura en desarrollo. Match: ${m.ID}')" class="tinder-btn w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center hover:bg-green-200">✅</button>
-                    <button onclick="alert('Funcionalidad de escritura en desarrollo. Match: ${m.ID}')" class="tinder-btn w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200">❌</button>
+                    <button onclick="window.actualizarEstado('${m.ID}', 'Contactado', this)" class="tinder-btn w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center hover:bg-green-200" title="Aceptar (Contactado)">✅</button>
+                    <button onclick="window.actualizarEstado('${m.ID}', 'Descartado ❌', this)" class="tinder-btn w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200" title="Descartar">❌</button>
                 </div>
             `;
             tinderContainer.appendChild(card);
