@@ -205,19 +205,36 @@ function aplicarFiltrosMapa() {
     const pMin = parseFloat(document.getElementById('map-f-pmin').value) || 0;
     const pMax = parseFloat(document.getElementById('map-f-pmax').value) || Infinity;
 
-    let filtrados = inventarioGlobal.filter(p => {
-        const precio = parseFloat(p.precio) || 0;
-        let match = true;
-        if(fBarrio && !(p.barrio || '').toLowerCase().includes(fBarrio)) match = false;
-        if(fOperacion && !(p.tipo_operacion || '').toLowerCase().includes(fOperacion)) match = false;
-        if(fTipo && !(p.tipo_propiedad || '').toLowerCase().includes(fTipo)) match = false;
-        if(fOrigen && !(p.fuente || '').toLowerCase().includes(fOrigen)) match = false;
-        if(precio < pMin || precio > pMax) match = false;
-        return match;
-    });
+    // 1. Filtrar Propiedades (Venta/Alquiler)
+    let filtrados = [];
+    if (fOperacion !== 'comprador') {
+        filtrados = inventarioGlobal.filter(p => {
+            const precio = parseFloat(p.precio) || 0;
+            let match = true;
+            if(fBarrio && !(p.barrio || '').toLowerCase().includes(fBarrio)) match = false;
+            if(fOperacion && !(p.tipo_operacion || '').toLowerCase().includes(fOperacion)) match = false;
+            if(fTipo && !(p.tipo_propiedad || '').toLowerCase().includes(fTipo)) match = false;
+            if(fOrigen && !(p.fuente || '').toLowerCase().includes(fOrigen)) match = false;
+            if(precio < pMin || precio > pMax) match = false;
+            return match;
+        });
+    }
 
-    document.getElementById('map-total-results').innerText = `${filtrados.length.toLocaleString()} propiedades encontradas`;
+    // 2. Filtrar Compradores (Leads del Excel)
+    let leadsFiltrados = [];
+    if (fOperacion === '' || fOperacion === 'comprador') {
+        leadsFiltrados = globalData.filter(l => {
+            if (fBarrio && !l._barrioLower.includes(fBarrio)) return false;
+            // Si hay un filtro de precio máximo y el lead no tiene ese presupuesto, lo filtramos? Mejor no, mostrar todos los leads de la zona
+            return true;
+        });
+    }
+
+    document.getElementById('map-total-results').innerText = `${filtrados.length.toLocaleString()} prop. | ${leadsFiltrados.length} compradores`;
+    
+    markerClusterGroup.clearLayers();
     renderMassiveMap(filtrados);
+    renderLeadsOnMap(leadsFiltrados);
 
     if(geojsonLayer) map.removeLayer(geojsonLayer);
     if(fBarrio && barriosPolygons) {
@@ -229,8 +246,53 @@ function aplicarFiltrosMapa() {
             map.fitBounds(geojsonLayer.getBounds());
         }
     } else {
-        map.setView([-34.6037, -58.3816], 12);
+        // Vista general de Buenos Aires/AMBA
+        map.setView([-34.6037, -58.3816], 11);
     }
+}
+
+function renderLeadsOnMap(leads) {
+    let markers = [];
+    leads.forEach(r => {
+        let lat = -34.6037 + (Math.random() * 0.1 - 0.05);
+        let lng = -58.3816 + (Math.random() * 0.1 - 0.05);
+        const b = r._barrioLower;
+        
+        for (const [key, coords] of Object.entries(barrioCoords)) {
+            if (b.includes(key)) {
+                lat = coords[0] + (Math.random()*0.015 - 0.0075);
+                lng = coords[1] + (Math.random()*0.015 - 0.0075);
+                break;
+            }
+        }
+
+        const leadIcon = L.divIcon({
+            className: 'leaflet-div-icon',
+            html: `<div style="background:#10b981; color:white; font-weight:bold; font-size:10px; padding:3px 8px; border-radius:12px; border:2px solid white; box-shadow:0 4px 6px rgba(0,0,0,0.2); white-space:nowrap; transform: translate(-50%, -50%); display:flex; align-items:center; gap:4px; z-index: 1000;">👤 Lead ${r['Comprador - Asesor WA'] || r.Asesor}</div>`,
+            iconSize: [0, 0], iconAnchor: [0, 0]
+        });
+
+        const presupuesto = r['Comprador - Presupuesto'] || r.Presupuesto || '?';
+        const zonas = r['Comprador - Zonas Buscadas'] || r['Zonas Buscadas'] || b;
+
+        const leadTooltipHTML = `
+            <div class="map-tooltip-card">
+                <div style="background:#10b981; color:white; padding:10px 14px; font-weight:bold; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">👤 Comprador Activo</div>
+                <div style="padding:14px;">
+                    <div style="font-size:14px; font-weight:900; color:#1f2937; margin-bottom:4px;">Presupuesto: USD ${presupuesto}</div>
+                    <div style="font-size:13px; color:#6b7280; font-weight:500; margin-bottom:10px;">Busca: ${zonas}</div>
+                    <div style="font-size:11px; padding:4px 8px; background:#ecfdf5; color:#059669; border-radius:6px; display:inline-block; font-weight:bold; border:1px solid #d1fae5;">💰 Com. Potencial: USD ${r._comisionPotencial.toLocaleString()}</div>
+                </div>
+            </div>
+        `;
+
+        const leadMarker = L.marker([lat, lng], {icon: leadIcon});
+        leadMarker.bindTooltip(leadTooltipHTML, { direction: 'bottom', offset: [0, 10], opacity: 1 });
+        markers.push(leadMarker);
+    });
+    
+    // Add leads to the cluster group so they cluster nicely too!
+    markerClusterGroup.addLayers(markers);
 }
 
 function renderMassiveMap(data) {
