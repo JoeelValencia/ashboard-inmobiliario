@@ -9,7 +9,8 @@ let heatLayer;
 let chartFuentes;
 let chartEstados;
 let globalData = [];
-let markerClusterGroup;
+let clusterIndex = null;
+let currentSuperclusterMarkers = [];
 let geojsonLayer;
 let inventarioGlobal = [];
 let barriosPolygons = null;
@@ -28,27 +29,20 @@ document.addEventListener('DOMContentLoaded', () => {
         attribution: '© Google', maxZoom: 19
     }).addTo(map);
 
-    // Inicializar MarkerCluster
-    markerClusterGroup = L.markerClusterGroup({
-        chunkedLoading: true,
-        maxClusterRadius: 50,
-        disableClusteringAtZoom: 16,
-        spiderfyOnMaxZoom: false
+    // Inicializar Supercluster
+    clusterIndex = new Supercluster({
+        radius: 60,
+        maxZoom: 16
     });
-    map.addLayer(markerClusterGroup);
+
+    // Evento de zoom y paneo para Supercluster
+    map.on('moveend', updateSupercluster);
 
     // Fetch GeoJSON de Barrios
     fetch('caba_barrios.geojson')
         .then(res => res.json())
         .then(data => {
             barriosPolygons = data;
-            const selectBarrio = document.getElementById('map-f-barrio');
-            if(selectBarrio) {
-                data.features.forEach(f => {
-                    const b = f.properties.BARRIO;
-                    selectBarrio.innerHTML += `<option value="${b}">${b}</option>`;
-                });
-            }
         }).catch(err => console.log('Error GeoJSON:', err));
 
     // Fetch Inventario Masivo
@@ -130,16 +124,10 @@ window.actualizarEstado = function(id, nuevoEstado, btnElement) {
 
 function aplicarFiltro() {
     const asesorFiltro = document.getElementById('select-asesor').value;
-    const barrioFiltro = document.getElementById('filter-barrio-base').value;
-
     let filtered = globalData;
     if (asesorFiltro !== "Todos") {
         filtered = filtered.filter(r => (r.Asesor || '').includes(asesorFiltro));
     }
-    if (barrioFiltro !== "all") {
-        filtered = filtered.filter(r => r._barrioLower.includes(barrioFiltro.toLowerCase()));
-    }
-
     renderKanban(filtered);
     renderAnalytics(filtered);
 }
@@ -187,7 +175,7 @@ function renderMap(data) {
 }
 
 function limpiarFiltrosMapa() {
-    document.getElementById('map-f-barrio').value = '';
+    document.getElementById('map-f-ubicacion').value = '';
     document.getElementById('map-f-operacion').value = '';
     document.getElementById('map-f-tipo').value = '';
     document.getElementById('map-f-origen').value = '';
@@ -198,7 +186,7 @@ function limpiarFiltrosMapa() {
 }
 
 function aplicarFiltrosMapa() {
-    const fBarrio = document.getElementById('map-f-barrio').value.toLowerCase();
+    const fUbicacion = document.getElementById('map-f-ubicacion').value.toLowerCase();
     const fOperacion = document.getElementById('map-f-operacion').value.toLowerCase();
     const fTipo = document.getElementById('map-f-tipo').value.toLowerCase();
     const fOrigen = document.getElementById('map-f-origen').value.toLowerCase();
@@ -211,11 +199,14 @@ function aplicarFiltrosMapa() {
         filtrados = inventarioGlobal.filter(p => {
             const precio = parseFloat(p.precio) || 0;
             let match = true;
-            if(fBarrio && !(p.barrio || '').toLowerCase().includes(fBarrio)) match = false;
             if(fOperacion && !(p.tipo_operacion || '').toLowerCase().includes(fOperacion)) match = false;
             if(fTipo && !(p.tipo_propiedad || '').toLowerCase().includes(fTipo)) match = false;
             if(fOrigen && !(p.fuente || '').toLowerCase().includes(fOrigen)) match = false;
             if(precio < pMin || precio > pMax) match = false;
+            if(fUbicacion) {
+                const searchStr = `${p.calle || ''} ${p.barrio || ''} ${p.localidad || ''} ${p.partido || ''} ${p.zona || ''}`.toLowerCase();
+                if(!searchStr.includes(fUbicacion)) match = false;
+            }
             return match;
         });
     }
@@ -236,7 +227,7 @@ function aplicarFiltrosMapa() {
                 let mainZone = '';
                 if (zonas) mainZone = zonas.split(',')[0].trim().toLowerCase();
 
-                if (fBarrio && !zonas.toLowerCase().includes(fBarrio)) return;
+                if (fUbicacion && !zonas.toLowerCase().includes(fUbicacion)) return;
 
                 uniqueBuyers.set(key, {
                     phone: phone,
@@ -258,32 +249,18 @@ function aplicarFiltrosMapa() {
 
     document.getElementById('map-total-results').innerText = `${filtrados.length.toLocaleString()} prop. | ${leadsFiltrados.length} compradores`;
     
-    markerClusterGroup.clearLayers();
-    renderMassiveMap(filtrados);
-    renderLeadsOnMap(leadsFiltrados);
-
-    if(geojsonLayer) map.removeLayer(geojsonLayer);
-    if(fBarrio && barriosPolygons) {
-        const feature = barriosPolygons.features.find(f => f.properties.BARRIO.toLowerCase() === fBarrio);
-        if(feature) {
-            geojsonLayer = L.geoJSON(feature, {
-                style: { color: '#ed5f2b', weight: 3, opacity: 0.8, fillColor: '#ed5f2b', fillOpacity: 0.1 }
-            }).addTo(map);
-            map.fitBounds(geojsonLayer.getBounds());
-        }
-    } else {
-        // Vista general de Buenos Aires/AMBA
-        map.setView([-34.6037, -58.3816], 11);
-    }
+    // Cargar los datos en Supercluster y actualizar vista
+    loadDataToSupercluster(filtrados, leadsFiltrados);
 }
 
-function renderLeadsOnMap(leads) {
-    let markers = [];
-    leads.forEach(r => {
+function loadDataToSupercluster(properties, leads) {
+    const geojsonFeatures = [];
+    
+    // Convertir propiedades a GeoJSON
+    properties.forEach(p => {
         let lat = -34.6037 + (Math.random() * 0.1 - 0.05);
         let lng = -58.3816 + (Math.random() * 0.1 - 0.05);
-        const b = r.mainZone;
-        
+        const b = (p.barrio || '').toLowerCase();
         for (const [key, coords] of Object.entries(barrioCoords)) {
             if (b.includes(key)) {
                 lat = coords[0] + (Math.random()*0.015 - 0.0075);
@@ -291,104 +268,137 @@ function renderLeadsOnMap(leads) {
                 break;
             }
         }
-
-        const phoneDisplay = r.phone ? r.phone : 'Anónimo';
-
-        const leadIcon = L.divIcon({
-            className: 'leaflet-div-icon',
-            html: `<div style="background:#10b981; color:white; font-weight:bold; font-size:10px; padding:3px 8px; border-radius:12px; border:2px solid white; box-shadow:0 4px 6px rgba(0,0,0,0.2); white-space:nowrap; transform: translate(-50%, -50%); display:flex; align-items:center; gap:4px; z-index: 1000;">👤 Lead ${phoneDisplay}</div>`,
-            iconSize: [0, 0], iconAnchor: [0, 0]
+        
+        geojsonFeatures.push({
+            type: "Feature",
+            properties: { ...p, isLead: false, cluster: false },
+            geometry: { type: "Point", coordinates: [lng, lat] }
         });
-
-        const leadTooltipHTML = `
-            <div class="map-tooltip-card">
-                <div style="background:#10b981; color:white; padding:10px 14px; font-weight:bold; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">👤 Comprador Activo</div>
-                <div style="padding:14px;">
-                    <div style="font-size:14px; font-weight:900; color:#1f2937; margin-bottom:4px;">Presupuesto: USD ${r.presupuesto}</div>
-                    <div style="font-size:13px; color:#6b7280; font-weight:500; margin-bottom:10px;">Busca: ${r.zonas}</div>
-                    <div style="font-size:11px; padding:4px 8px; background:#ecfdf5; color:#059669; border-radius:6px; display:inline-block; font-weight:bold; border:1px solid #d1fae5;">💰 Com. Potencial: USD ${r.comisionMax.toLocaleString()}</div>
-                </div>
-            </div>
-        `;
-
-        const leadMarker = L.marker([lat, lng], {icon: leadIcon});
-        leadMarker.bindTooltip(leadTooltipHTML, { direction: 'bottom', offset: [0, 10], opacity: 1 });
-        markers.push(leadMarker);
     });
-    
-    // Add leads to the cluster group so they cluster nicely too!
-    markerClusterGroup.addLayers(markers);
-}
 
-function renderMassiveMap(data) {
-    markerClusterGroup.clearLayers();
-    let markers = [];
-    const maxRender = 40000;
-    let rendered = 0;
-    
-    // Contar zonas para la leyenda flotante
-    const conteoBarrios = {};
-
-    data.forEach(r => {
-        if(rendered >= maxRender) return;
-        rendered++;
-
+    // Convertir leads a GeoJSON
+    leads.forEach(l => {
         let lat = -34.6037 + (Math.random() * 0.1 - 0.05);
         let lng = -58.3816 + (Math.random() * 0.1 - 0.05);
-        const b = (r.barrio || '').toLowerCase();
-        
+        const b = l.mainZone;
         for (const [key, coords] of Object.entries(barrioCoords)) {
             if (b.includes(key)) {
                 lat = coords[0] + (Math.random()*0.015 - 0.0075);
                 lng = coords[1] + (Math.random()*0.015 - 0.0075);
-                conteoBarrios[key] = (conteoBarrios[key] || 0) + 1;
                 break;
             }
         }
-
-        const precio = parseFloat(r.precio) || 0;
-        let precioTxt = (precio/1000).toFixed(0) + 'K';
-        if(precio > 1000000) precioTxt = (precio/1000000).toFixed(1) + 'M';
-
-        const propIcon = L.divIcon({
-            className: 'leaflet-div-icon',
-            html: `<div style="background:#ed5f2b; color:white; font-family: sans-serif; font-weight:600; font-size:11px; padding:2px 6px; border-radius:12px; border:1px solid white; box-shadow:0 1px 3px rgba(0,0,0,0.2); white-space:nowrap; transform: translate(-50%, -50%); cursor:pointer; transition: transform 0.1s;">USD ${precioTxt}</div>`,
-            iconSize: [0, 0], iconAnchor: [0, 0]
+        
+        geojsonFeatures.push({
+            type: "Feature",
+            properties: { ...l, isLead: true, cluster: false },
+            geometry: { type: "Point", coordinates: [lng, lat] }
         });
-
-        const propTooltipHTML = `
-            <div class="map-tooltip-card">
-                <div style="background:#ed5f2b; color:white; padding:8px 12px; font-weight:bold; font-size:11px; text-transform:uppercase;">🏠 ${r.tipo_propiedad || 'Propiedad'} (${r.tipo_operacion || 'Venta'})</div>
-                <div style="padding:12px;">
-                    <div style="font-size:16px; font-weight:900; color:#1f2937; margin-bottom:2px;">USD ${precio.toLocaleString()}</div>
-                    <div style="font-size:12px; color:#6b7280; font-weight:500; margin-bottom:8px;">${r.Ambientes || '?'} amb • ${r.dormitorios || '?'} dorm • <span style="text-transform:capitalize;">${r.barrio}</span></div>
-                    <div style="font-size:10px; padding:3px 6px; background:#f3f4f6; color:#4b5563; border-radius:4px; display:inline-block; font-weight:bold;">📍 ${r.fuente}</div>
-                    <div style="font-size:10px; color:#ed5f2b; margin-top:8px; font-weight:bold;">Ver aviso original 👉</div>
-                </div>
-            </div>
-        `;
-
-        const propMarker = L.marker([lat, lng], {icon: propIcon});
-        propMarker.bindTooltip(propTooltipHTML, { direction: 'top', offset: [0, -10], opacity: 1 });
-        propMarker.on('click', () => {
-            const url = r.url;
-            if(url && url !== 'nan' && url.startsWith('http')) window.open(url, '_blank');
-        });
-
-        markers.push(propMarker);
     });
 
-    markerClusterGroup.addLayers(markers);
+    // Cargar en el motor
+    clusterIndex.load(geojsonFeatures);
+    
+    // Forzar actualización visual
+    updateSupercluster();
+}
 
-    // Actualizar leyenda flotante de top zonas
-    const topZonasList = Object.entries(conteoBarrios).sort((a,b) => b[1] - a[1]).slice(0, 5);
-    const topZonas = document.getElementById('map-zonas-legend');
-    if(topZonas) {
-        topZonas.innerHTML = '';
-        topZonasList.forEach(z => {
-            topZonas.innerHTML += `<div class="flex justify-between items-center w-full mb-1"><span class="capitalize text-gray-700 font-semibold">${z[0]}</span><span class="text-primary font-bold bg-primary/10 px-2 py-0.5 rounded-md">${z[1]}</span></div>`;
-        });
-    }
+function updateSupercluster() {
+    if (!clusterIndex) return;
+
+    // Remover marcadores anteriores
+    currentSuperclusterMarkers.forEach(m => map.removeLayer(m));
+    currentSuperclusterMarkers = [];
+
+    const bounds = map.getBounds();
+    const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+    const zoom = map.getZoom();
+
+    const clusters = clusterIndex.getClusters(bbox, zoom);
+
+    clusters.forEach(c => {
+        const [lng, lat] = c.geometry.coordinates;
+        const isCluster = c.properties.cluster;
+
+        if (isCluster) {
+            // Dibujar Burbuja Cluster
+            const count = c.properties.point_count;
+            const size = count < 100 ? 30 : count < 1000 ? 40 : 50;
+            const color = count < 100 ? '#f59e0b' : count < 1000 ? '#ea580c' : '#c2410c'; // Yellow to Orange to Dark Orange
+            
+            const clusterIcon = L.divIcon({
+                className: 'leaflet-div-icon',
+                html: `<div style="background:${color}; color:white; width:${size}px; height:${size}px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:bold; font-size:12px; border:2px solid rgba(255,255,255,0.5); box-shadow:0 2px 5px rgba(0,0,0,0.3); transition:all 0.2s;">${count}</div>`,
+                iconSize: [size, size],
+                iconAnchor: [size/2, size/2]
+            });
+            
+            const marker = L.marker([lat, lng], {icon: clusterIcon}).addTo(map);
+            marker.on('click', () => {
+                map.flyTo([lat, lng], zoom + 2);
+            });
+            currentSuperclusterMarkers.push(marker);
+
+        } else {
+            // Dibujar Marcador Individual
+            const props = c.properties;
+            if (props.isLead) {
+                // LEAD (Comprador)
+                const phoneDisplay = props.phone ? props.phone : 'Anónimo';
+                const leadIcon = L.divIcon({
+                    className: 'leaflet-div-icon',
+                    html: `<div style="background:#10b981; color:white; font-weight:bold; font-size:10px; padding:3px 8px; border-radius:12px; border:2px solid white; box-shadow:0 4px 6px rgba(0,0,0,0.2); white-space:nowrap; transform: translate(-50%, -50%); display:flex; align-items:center; gap:4px; z-index: 1000;">👤 Lead ${phoneDisplay}</div>`,
+                    iconSize: [0, 0], iconAnchor: [0, 0]
+                });
+
+                const leadTooltipHTML = `
+                    <div class="map-tooltip-card">
+                        <div style="background:#10b981; color:white; padding:10px 14px; font-weight:bold; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">👤 Comprador Activo</div>
+                        <div style="padding:14px;">
+                            <div style="font-size:14px; font-weight:900; color:#1f2937; margin-bottom:4px;">Presupuesto: USD ${props.presupuesto}</div>
+                            <div style="font-size:13px; color:#6b7280; font-weight:500; margin-bottom:10px;">Busca: ${props.zonas}</div>
+                            <div style="font-size:11px; padding:4px 8px; background:#ecfdf5; color:#059669; border-radius:6px; display:inline-block; font-weight:bold; border:1px solid #d1fae5;">💰 Com. Potencial: USD ${props.comisionMax.toLocaleString()}</div>
+                        </div>
+                    </div>
+                `;
+
+                const marker = L.marker([lat, lng], {icon: leadIcon}).addTo(map);
+                marker.bindTooltip(leadTooltipHTML, { direction: 'bottom', offset: [0, 10], opacity: 1 });
+                currentSuperclusterMarkers.push(marker);
+
+            } else {
+                // PROPIEDAD (Venta/Alquiler)
+                const precio = parseFloat(props.precio) || 0;
+                let precioTxt = (precio/1000).toFixed(0) + 'K';
+                if(precio > 1000000) precioTxt = (precio/1000000).toFixed(1) + 'M';
+
+                const propIcon = L.divIcon({
+                    className: 'leaflet-div-icon',
+                    html: `<div style="background:#ed5f2b; color:white; font-family: sans-serif; font-weight:600; font-size:11px; padding:2px 6px; border-radius:12px; border:1px solid white; box-shadow:0 1px 3px rgba(0,0,0,0.2); white-space:nowrap; transform: translate(-50%, -50%); cursor:pointer; transition: transform 0.1s;">USD ${precioTxt}</div>`,
+                    iconSize: [0, 0], iconAnchor: [0, 0]
+                });
+
+                const propTooltipHTML = `
+                    <div class="map-tooltip-card">
+                        <div style="background:#ed5f2b; color:white; padding:8px 12px; font-weight:bold; font-size:11px; text-transform:uppercase;">🏠 ${props.tipo_propiedad || 'Propiedad'} (${props.tipo_operacion || 'Venta'})</div>
+                        <div style="padding:12px;">
+                            <div style="font-size:16px; font-weight:900; color:#1f2937; margin-bottom:2px;">USD ${precio.toLocaleString()}</div>
+                            <div style="font-size:12px; color:#6b7280; font-weight:500; margin-bottom:8px;">${props.Ambientes || '?'} amb • ${props.dormitorios || '?'} dorm • <span style="text-transform:capitalize;">${props.barrio}</span></div>
+                            <div style="font-size:10px; padding:3px 6px; background:#f3f4f6; color:#4b5563; border-radius:4px; display:inline-block; font-weight:bold;">📍 ${props.fuente}</div>
+                            <div style="font-size:10px; color:#ed5f2b; margin-top:8px; font-weight:bold;">Ver aviso original 👉</div>
+                        </div>
+                    </div>
+                `;
+
+                const marker = L.marker([lat, lng], {icon: propIcon}).addTo(map);
+                marker.bindTooltip(propTooltipHTML, { direction: 'top', offset: [0, -10], opacity: 1 });
+                marker.on('click', () => {
+                    if(props.url && props.url !== 'nan' && props.url.startsWith('http')) window.open(props.url, '_blank');
+                });
+                currentSuperclusterMarkers.push(marker);
+            }
+        }
+    });
 }
 
 function renderAnalytics(data) {

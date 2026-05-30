@@ -209,11 +209,8 @@
         <div id="view-map" class="flex-1 hide view-section relative flex flex-col">
             <!-- ZONAPROP STYLE FILTERS BAR -->
             <div class="bg-white border-b border-gray-200 p-3 flex flex-wrap gap-3 items-center z-[1000] shadow-sm flex-shrink-0 relative">
-                <!-- Ubicación -->
-                <select id="map-f-barrio" class="border border-gray-300 rounded-md px-3 py-2 text-sm font-semibold text-gray-700 w-40 focus:ring-2 focus:ring-primary outline-none bg-white">
-                    <option value="">Todo CABA</option>
-                    <!-- Se llena con JS -->
-                </select>
+                <!-- Ubicación (Buscador) -->
+                <input type="text" id="map-f-ubicacion" placeholder="🔍 Buscar calle, barrio, zona..." class="border border-gray-300 rounded-md px-3 py-2 text-sm font-semibold text-gray-700 w-48 focus:ring-2 focus:ring-primary outline-none bg-white">
                 
                 <!-- Operación -->
                 <select id="map-f-operacion" class="border border-gray-300 rounded-md px-3 py-2 text-sm font-semibold text-gray-700 w-32 focus:ring-2 focus:ring-primary outline-none bg-white">
@@ -224,12 +221,36 @@
                 </select>
                 
                 <!-- Tipo Inmueble -->
-                <select id="map-f-tipo" class="border border-gray-300 rounded-md px-3 py-2 text-sm font-semibold text-gray-700 w-40 focus:ring-2 focus:ring-primary outline-none bg-white">
+                <select id="map-f-tipo" class="border border-gray-300 rounded-md px-3 py-2 text-sm font-semibold text-gray-700 w-36 focus:ring-2 focus:ring-primary outline-none bg-white">
                     <option value="">Tipo Propiedad</option>
-                    <option value="Departamento">Departamento</option>
                     <option value="Casa">Casa</option>
+                    <option value="Chalet">Chalet</option>
+                    <option value="Vivienda">Vivienda</option>
+                    <option value="Departamento">Departamento</option>
+                    <option value="Depto">Depto</option>
+                    <option value="Apartamento">Apartamento</option>
                     <option value="Ph">PH</option>
-                    <option value="Terreno">Terreno</option>
+                    <option value="Duplex">Dúplex</option>
+                    <option value="Triplex">Tríplex</option>
+                    <option value="Monoambiente">Monoambiente</option>
+                    <option value="Loft">Loft</option>
+                    <option value="Quinta">Quinta</option>
+                    <option value="Casa quinta">Casa quinta</option>
+                    <option value="Campo">Campo</option>
+                    <option value="Chacra">Chacra</option>
+                    <option value="Estancia">Estancia</option>
+                    <option value="Finca">Finca</option>
+                    <option value="Terreno">Terreno / Lote</option>
+                    <option value="Parcela">Parcela / Fracción</option>
+                    <option value="Country">Country / Barrio cerrado</option>
+                    <option value="Local">Local</option>
+                    <option value="Oficina">Oficina / Consultorio</option>
+                    <option value="Galpon">Galpón / Depósito / Nave</option>
+                    <option value="Cochera">Cochera / Garage</option>
+                    <option value="Fondo de comercio">Fondo de comercio</option>
+                    <option value="Dueño vende">Dueño vende / Particular</option>
+                    <option value="Venta directa">Venta directa</option>
+                    <option value="Sin inmobiliaria">Sin inmobiliaria / comisión</option>
                 </select>
 
                 <!-- Dueño / Inmo -->
@@ -304,6 +325,7 @@
     <!-- Scripts -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"></script>
     <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
