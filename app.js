@@ -18,8 +18,8 @@ const barrioCoords = {
 document.addEventListener('DOMContentLoaded', () => {
     // Inicializar Mapa
     map = L.map('map').setView([-34.6037, -58.3816], 12);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap', maxZoom: 19
+    L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        attribution: '© Google', maxZoom: 19
     }).addTo(map);
 
     // Fetch y Parse del CSV
@@ -195,10 +195,10 @@ function renderKanban(data) {
 }
 
 function renderMap(data) {
-    if (heatLayer) map.removeLayer(heatLayer);
     if (markersLayer) map.removeLayer(markersLayer);
+    // Removemos la capa de calor vieja si existe (ya no la dibujamos más)
+    if (typeof heatLayer !== 'undefined' && heatLayer) map.removeLayer(heatLayer);
     
-    const heatData = [];
     const conteoBarrios = {};
     markersLayer = L.layerGroup().addTo(map);
 
@@ -216,30 +216,29 @@ function renderMap(data) {
                 break;
             }
         }
-        heatData.push([lat, lng, 0.5]);
 
-        if((r._estadoNorm === 'Pendiente' || r._estadoNorm === 'Contactado') && renderCount < 100) {
+        if((r._estadoNorm === 'Pendiente' || r._estadoNorm === 'Contactado') && renderCount < 150) {
             renderCount++;
             
             let urlPublicacion = r['URL Publicación'] || r['URL\n Publicación'] || '#';
             urlPublicacion = urlPublicacion.trim();
             if(!urlPublicacion.startsWith('http')) urlPublicacion = 'https://' + urlPublicacion;
 
-            // 1. MARCADOR DEL VENDEDOR (PROPIEDAD) - ZONAPROP STYLE PURPLE
+            // 1. MARCADOR DEL VENDEDOR (PROPIEDAD) - ZONAPROP ORANGE (#ed5f2b)
             const propIcon = L.divIcon({
                 className: 'leaflet-div-icon',
-                html: `<div style="background:#6422b9; color:white; font-weight:800; font-size:12px; padding:4px 10px; border-radius:6px; border:2px solid white; box-shadow:0 4px 10px rgba(0,0,0,0.15); white-space:nowrap; transform: translate(-50%, -100%);">USD ${(r._precioNum/1000).toFixed(0)}k</div>`,
+                html: `<div style="background:#ed5f2b; color:white; font-family: sans-serif; font-weight:600; font-size:12px; padding:3px 8px; border-radius:12px; border:1.5px solid white; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; transform: translate(-50%, -100%); cursor:pointer; transition: transform 0.1s;">USD ${(r._precioNum/1000).toFixed(0)}K</div>`,
                 iconSize: [0, 0], iconAnchor: [0, 0]
             });
 
             const propTooltipHTML = `
                 <div class="map-tooltip-card">
-                    <div style="background:#6422b9; color:white; padding:10px 14px; font-weight:bold; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">🏠 Propiedad (Venta)</div>
+                    <div style="background:#ed5f2b; color:white; padding:10px 14px; font-weight:bold; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">🏠 Propiedad (Venta)</div>
                     <div style="padding:14px;">
                         <div style="font-size:18px; font-weight:900; color:#1f2937; margin-bottom:4px;">USD ${r._precioNum.toLocaleString()}</div>
                         <div style="font-size:13px; color:#6b7280; font-weight:500; margin-bottom:10px;">${r['Tipo Propiedad']} • ${r['Ambientes Prop.'] || r['Amb'] || '?'} amb • <span style="text-transform:capitalize;">${r._barrioLower}</span></div>
                         <div style="font-size:11px; padding:4px 8px; background:#f3f4f6; color:#4b5563; border-radius:6px; display:inline-block; font-weight:bold;">📍 Origen: ${r.Fuente}</div>
-                        <div style="font-size:11px; color:#ff5a5f; margin-top:12px; font-weight:bold;">Haz clic para ver el aviso original 👉</div>
+                        <div style="font-size:11px; color:#ed5f2b; margin-top:12px; font-weight:bold;">Haz clic para ver el aviso original 👉</div>
                     </div>
                 </div>
             `;
@@ -251,13 +250,13 @@ function renderMap(data) {
                 else alert("Esta propiedad no tiene URL de publicación cargada.");
             });
 
-            // 2. MARCADOR DEL COMPRADOR (LEAD) - ACCENT CORAL
-            const leadLat = lat - 0.0008; 
-            const leadLng = lng + 0.0005;
+            // 2. MARCADOR DEL COMPRADOR (LEAD) - SUBTLE WHITE PILL
+            const leadLat = lat - 0.0006; 
+            const leadLng = lng + 0.0004;
 
             const leadIcon = L.divIcon({
                 className: 'leaflet-div-icon',
-                html: `<div style="background:#10b981; color:white; font-weight:bold; font-size:10px; padding:3px 8px; border-radius:12px; border:2px solid white; box-shadow:0 4px 6px rgba(0,0,0,0.1); white-space:nowrap; transform: translate(-50%, -50%); display:flex; align-items:center; gap:4px;">👤 Lead ${r['Comprador - Asesor WA']}</div>`,
+                html: `<div style="background:white; color:#6b7280; font-weight:bold; font-size:9px; padding:2px 6px; border-radius:12px; border:1px solid #d1d5db; box-shadow:0 1px 2px rgba(0,0,0,0.1); white-space:nowrap; transform: translate(-50%, -50%); display:flex; align-items:center; gap:2px; opacity: 0.9;">👤 ${r['Comprador - Asesor WA']}</div>`,
                 iconSize: [0, 0], iconAnchor: [0, 0]
             });
 
@@ -275,7 +274,7 @@ function renderMap(data) {
             const leadMarker = L.marker([leadLat, leadLng], {icon: leadIcon}).addTo(markersLayer);
             leadMarker.bindTooltip(leadTooltipHTML, { direction: 'bottom', offset: [0, 10], opacity: 1 });
             
-            L.polyline([[lat, lng], [leadLat, leadLng]], {color: '#9ca3af', weight: 2, dashArray: '4, 4'}).addTo(markersLayer);
+            // Eliminamos la linea conector (polyline) para no ensuciar el mapa y que quede limpio como ZonaProp
         }
     });
 
