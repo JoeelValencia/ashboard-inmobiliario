@@ -18,7 +18,7 @@ const barrioCoords = {
 document.addEventListener('DOMContentLoaded', () => {
     // Inicializar Mapa
     map = L.map('map').setView([-34.6037, -58.3816], 12);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap', maxZoom: 19
     }).addTo(map);
 
@@ -200,8 +200,10 @@ function renderMap(data) {
     if (markersLayer) map.removeLayer(markersLayer);
     
     const heatData = [];
-    const markersData = [];
     const conteoBarrios = {};
+    markersLayer = L.layerGroup().addTo(map);
+
+    let renderCount = 0;
 
     data.forEach(r => {
         let lat = -34.6037 + (Math.random() * 0.1 - 0.05);
@@ -216,27 +218,71 @@ function renderMap(data) {
             }
         }
         heatData.push([lat, lng, 0.8]);
-        if(r._estadoNorm === 'Pendiente' || r._estadoNorm === 'Contactado') {
-            markersData.push({lat, lng, title: r['Tipo Propiedad'] + ' en ' + r._barrioLower, price: r._precioNum, id: r.ID, st: r._estadoNorm});
+
+        // Solo dibujar pines para los activos (para no saturar visualmente)
+        if((r._estadoNorm === 'Pendiente' || r._estadoNorm === 'Contactado') && renderCount < 100) {
+            renderCount++;
+            
+            let urlPublicacion = r['URL Publicación'] || r['URL\n Publicación'] || '#';
+            urlPublicacion = urlPublicacion.trim();
+            if(!urlPublicacion.startsWith('http')) urlPublicacion = 'https://' + urlPublicacion;
+
+            // 1. MARCADOR DEL VENDEDOR (PROPIEDAD)
+            const propIcon = L.divIcon({
+                className: 'leaflet-div-icon',
+                html: `<div style="background:#3b82f6; color:white; font-weight:bold; font-size:11px; padding:2px 8px; border-radius:4px; border:1px solid #60a5fa; box-shadow:0 4px 6px rgba(0,0,0,0.3); white-space:nowrap; transform: translate(-50%, -100%); mt-2">USD ${(r._precioNum/1000).toFixed(0)}k</div>`,
+                iconSize: [0, 0], iconAnchor: [0, 0]
+            });
+
+            const propTooltipHTML = `
+                <div class="map-tooltip-card">
+                    <div style="background:#3b82f6; padding:8px 12px; font-weight:bold; font-size:12px;">🏠 Propiedad (Venta)</div>
+                    <div style="padding:12px;">
+                        <div style="font-size:16px; font-weight:bold; margin-bottom:4px;">USD ${r._precioNum.toLocaleString()}</div>
+                        <div style="font-size:12px; color:#a1a1aa; margin-bottom:8px;">${r['Tipo Propiedad']} • ${r['Ambientes Prop.'] || r['Amb'] || '?'} amb • <span style="text-transform:capitalize;">${r._barrioLower}</span></div>
+                        <div style="font-size:10px; padding:4px 8px; background:#27272a; border-radius:4px; display:inline-block;">📍 Origen: ${r.Fuente}</div>
+                        <div style="font-size:10px; color:#3b82f6; margin-top:8px; font-weight:bold;">Clic para ir al aviso original 👉</div>
+                    </div>
+                </div>
+            `;
+
+            const propMarker = L.marker([lat, lng], {icon: propIcon}).addTo(markersLayer);
+            propMarker.bindTooltip(propTooltipHTML, { direction: 'top', offset: [0, -25], opacity: 1 });
+            propMarker.on('click', () => {
+                if(urlPublicacion && urlPublicacion !== 'https://#') window.open(urlPublicacion, '_blank');
+                else alert("Esta propiedad no tiene URL de publicación cargada.");
+            });
+
+            // 2. MARCADOR DEL COMPRADOR (LEAD) - Ligeramente desplazado
+            const leadLat = lat - 0.0008; 
+            const leadLng = lng + 0.0005;
+
+            const leadIcon = L.divIcon({
+                className: 'leaflet-div-icon',
+                html: `<div style="background:#10b981; color:#064e3b; font-weight:bold; font-size:10px; padding:2px 8px; border-radius:12px; border:1px solid #34d399; box-shadow:0 4px 6px rgba(0,0,0,0.3); white-space:nowrap; transform: translate(-50%, -50%); flex; align-items:center; gap:4px;">👤 Lead ${r['Comprador - Asesor WA']}</div>`,
+                iconSize: [0, 0], iconAnchor: [0, 0]
+            });
+
+            const leadTooltipHTML = `
+                <div class="map-tooltip-card" style="border-color: rgba(16, 185, 129, 0.4);">
+                    <div style="background:#10b981; color:#064e3b; padding:8px 12px; font-weight:bold; font-size:12px;">👤 Comprador Activo</div>
+                    <div style="padding:12px;">
+                        <div style="font-size:14px; font-weight:bold; margin-bottom:4px;">Presupuesto: USD ${r['Comprador - Presupuesto']}</div>
+                        <div style="font-size:12px; color:#a1a1aa; margin-bottom:8px;">Busca: ${r['Comprador - Zonas Buscadas']}</div>
+                        <div style="font-size:10px; padding:4px 8px; background:rgba(16,185,129,0.1); color:#10b981; border-radius:4px; display:inline-block; font-weight:bold;">💰 Comis. Potencial: USD ${r._comisionPotencial.toLocaleString()}</div>
+                    </div>
+                </div>
+            `;
+
+            const leadMarker = L.marker([leadLat, leadLng], {icon: leadIcon}).addTo(markersLayer);
+            leadMarker.bindTooltip(leadTooltipHTML, { direction: 'bottom', offset: [0, 10], opacity: 1 });
+            
+            // Dibujar línea conectora entre Comprador y Propiedad
+            L.polyline([[lat, lng], [leadLat, leadLng]], {color: '#52525b', weight: 1, dashArray: '4, 4'}).addTo(markersLayer);
         }
     });
 
     heatLayer = L.heatLayer(heatData, { radius: 25, blur: 20, maxZoom: 14, gradient: {0.4: 'blue', 0.6: 'cyan', 0.8: 'yellow', 1.0: 'red'} }).addTo(map);
-    
-    markersLayer = L.layerGroup().addTo(map);
-    markersData.slice(0, 100).forEach(m => {
-        let color = m.st === 'Contactado' ? 'orange' : 'blue';
-        const icon = L.divIcon({
-            className: 'custom-div-icon',
-            html: `<div style="background-color:${color}; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>`,
-            iconSize: [12, 12], iconAnchor: [6, 6]
-        });
-        L.marker([m.lat, m.lng], {icon: icon}).addTo(markersLayer).bindPopup(`
-            <div style="color:black">
-                <b>${m.title}</b><br>USD ${m.price.toLocaleString()}<br>ID: ${m.id}
-            </div>
-        `);
-    });
 
     const topZonasList = Object.entries(conteoBarrios).sort((a,b) => b[1] - a[1]).slice(0, 5);
     const topZonas = document.getElementById('map-zonas-legend');

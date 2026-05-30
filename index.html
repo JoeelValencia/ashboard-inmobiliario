@@ -45,9 +45,30 @@
 
         /* Kanban Columns */
         .kanban-col { min-width: 320px; max-width: 320px; }
+
+        /* Leaflet Overrides for Premium Markers & Tooltips */
+        .leaflet-div-icon { background: transparent; border: none; }
+        .leaflet-tooltip { 
+            background: transparent !important; 
+            border: none !important; 
+            box-shadow: none !important; 
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        .leaflet-tooltip::before { display: none !important; } /* Hide default triangle */
         
-        /* Map specific inverted colors for dark mode */
-        #map { filter: brightness(0.8) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7); }
+        /* Tooltip Dark Card Styling */
+        .map-tooltip-card {
+            background: rgba(24, 24, 27, 0.95);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(63, 63, 70, 0.8);
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            width: 240px;
+            color: #f4f4f5;
+            overflow: hidden;
+            pointer-events: none; /* Let hover pass through */
+        }
     </style>
 </head>
 <body class="flex h-screen w-screen text-zinc-100 selection:bg-primary/30">
