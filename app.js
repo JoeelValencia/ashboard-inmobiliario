@@ -1,4 +1,4 @@
-// app.js - CRM Multi-Asesor y Analítica Espacial V2
+// app.js - Nexus CRM Pro
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRCE8uHbyUCrZKdBOqGRf5OKx2TqMX-z0VJRZ1YQoS4-5szkZ31fJbc6diA2ydxhQdVBn2h0G1hT1hn/pub?gid=2040705075&single=true&output=csv';
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxlE_a4It3IueNJuWDACwCVdh-AgNMIgH6RsmVdsQ5e2rNhf4MUdPzYtiRz_FECnrRw/exec';
 
@@ -6,7 +6,14 @@ let globalData = [];
 let map;
 let heatLayer;
 let markersLayer;
-let portalesChart;
+let chartFuentes, chartEstados;
+
+// Coordenadas base (Simuladas para CABA)
+const barrioCoords = {
+    'palermo': [-34.588, -58.430], 'belgrano': [-34.562, -58.456], 'recoleta': [-34.589, -58.397],
+    'caballito': [-34.618, -58.437], 'urquiza': [-34.573, -58.481], 'nuñez': [-34.545, -58.465],
+    'almagro': [-34.609, -58.422], 'flores': [-34.629, -58.463], 'centro': [-34.603, -58.381]
+};
 
 document.addEventListener('DOMContentLoaded', () => {
     // Inicializar Mapa
@@ -22,36 +29,54 @@ document.addEventListener('DOMContentLoaded', () => {
         complete: function(results) {
             let data = results.data;
             if(data && data.length > 0) {
-                // Limpiar headers y preparar datos numéricos
                 globalData = data.map(row => {
                     const cleanRow = {};
                     for(let key in row) {
                         const cleanKey = key.replace(/\n/g, '').replace(/\s+/g, ' ').trim();
                         cleanRow[cleanKey] = row[key];
                     }
-                    // Parsear Precio para Comisión (6%)
                     let precioStr = cleanRow['Precio Publicado'] || cleanRow['Precio'] || '0';
                     let precioNum = parseInt(precioStr.replace(/\D/g, '')) || 0;
                     cleanRow._precioNum = precioNum;
                     cleanRow._comisionPotencial = precioNum * 0.06;
                     cleanRow._barrioLower = (cleanRow['Barrio / Zona'] || cleanRow['Barrio/Zona'] || cleanRow['Barrio'] || '').toLowerCase();
+                    // Normalizar Estado
+                    let st = (cleanRow.Estado || "Pendiente").trim();
+                    if(st.toLowerCase().includes("cerrado") || st.toLowerCase().includes("ganado")) cleanRow._estadoNorm = "Cerrado";
+                    else if(st.toLowerCase().includes("descartado") || st.includes("❌")) cleanRow._estadoNorm = "Descartado";
+                    else if(st.toLowerCase().includes("contactado") || st.includes("✅")) cleanRow._estadoNorm = "Contactado";
+                    else cleanRow._estadoNorm = "Pendiente";
+                    
                     return cleanRow;
                 }).filter(r => r.ID && r.ID.trim() !== '');
 
-                renderDashboard();
+                renderAll();
             }
         }
     });
 
-    // Event Listeners Filtros
-    document.getElementById('select-asesor').addEventListener('change', renderDashboard);
-    document.getElementById('filter-barrio-base').addEventListener('change', renderDashboard);
-    document.getElementById('filter-comision').addEventListener('change', renderDashboard);
+    document.getElementById('select-asesor').addEventListener('change', renderAll);
+    document.getElementById('filter-barrio-base').addEventListener('change', renderAll);
 });
 
-// Función para enviar la actualización a Google Sheets
+// View Routing
+window.switchView = function(viewName) {
+    document.querySelectorAll('.view-section').forEach(el => el.classList.add('hide'));
+    document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+    
+    document.getElementById('view-' + viewName).classList.remove('hide');
+    document.getElementById('nav-' + viewName).classList.add('active');
+    
+    let titles = { 'kanban': 'Pipeline (Kanban)', 'map': 'Intelligence Map', 'analytics': 'Analytics & Equipo' };
+    document.getElementById('current-view-title').innerText = titles[viewName];
+
+    if(viewName === 'map') {
+        setTimeout(() => map.invalidateSize(), 100);
+    }
+}
+
 window.actualizarEstado = function(id, nuevoEstado, btnElement) {
-    const card = btnElement.closest('.tinder-card-item');
+    const card = btnElement.closest('.kanban-card');
     card.style.opacity = '0.5'; card.style.pointerEvents = 'none';
 
     fetch(SCRIPT_URL, {
@@ -59,74 +84,126 @@ window.actualizarEstado = function(id, nuevoEstado, btnElement) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: id, estado: nuevoEstado })
     }).then(() => {
-        card.style.display = 'none';
+        // Optimistic UI update
+        const obj = globalData.find(x => x.ID === id);
+        if(obj) {
+            obj.Estado = nuevoEstado;
+            if(nuevoEstado.includes("Cerrado")) obj._estadoNorm = "Cerrado";
+            else if(nuevoEstado.includes("Descartado")) obj._estadoNorm = "Descartado";
+            else if(nuevoEstado.includes("Contactado")) obj._estadoNorm = "Contactado";
+            else obj._estadoNorm = "Pendiente";
+        }
+        renderAll();
     }).catch(() => {
         alert("Error de conexión. Intentá de nuevo.");
         card.style.opacity = '1'; card.style.pointerEvents = 'auto';
     });
 };
 
-function renderDashboard() {
+function renderAll() {
     const asesorFiltro = document.getElementById('select-asesor').value;
     const barrioFiltro = document.getElementById('filter-barrio-base').value;
-    const comisionFiltro = parseInt(document.getElementById('filter-comision').value) || 0;
 
-    const userDisplay = document.getElementById('current-user-display');
-    if(userDisplay) userDisplay.innerText = asesorFiltro === "Todos" ? "Equipo Completo" : asesorFiltro;
-
-    // ── 1. Filtrado de Datos ────────────────────────────────────────────────
-    let filteredRows = globalData;
-
-    // Filtro Asesor
+    // 1. Filter Data
+    let filtered = globalData;
     if (asesorFiltro !== "Todos") {
-        filteredRows = filteredRows.filter(r => (r.Asesor || '').includes(asesorFiltro));
+        filtered = filtered.filter(r => (r.Asesor || '').includes(asesorFiltro));
     }
-
-    // Filtro Comisión Mínima
-    if (comisionFiltro > 0) {
-        filteredRows = filteredRows.filter(r => r._comisionPotencial >= comisionFiltro);
-    }
-
-    // Filtro Barrio Base (Logística)
     if (barrioFiltro !== "all") {
         let keywords = [];
         if (barrioFiltro === "palermo") keywords = ["palermo", "recoleta", "belgrano"];
         if (barrioFiltro === "caballito") keywords = ["caballito", "almagro", "flores"];
-        if (barrioFiltro === "villa urquiza") keywords = ["urquiza", "nuñez", "saavedra"];
-        
-        filteredRows = filteredRows.filter(r => {
-            return keywords.some(k => r._barrioLower.includes(k));
-        });
+        filtered = filtered.filter(r => keywords.some(k => r._barrioLower.includes(k)));
     }
 
-    // ── 2. Calcular KPIs ────────────────────────────────────────────────────
-    const totalMatches = filteredRows.length;
-    let cerrados = 0;
-    let comisionTotal = 0;
-    let fb = 0, ml = 0, zp = 0;
-    let compradoresUnique = new Set();
-    
-    // Coordenadas base (Simuladas para CABA por falta de geocoding)
-    const barrioCoords = {
-        'palermo': [-34.588, -58.430], 'belgrano': [-34.562, -58.456],
-        'recoleta': [-34.589, -58.397], 'caballito': [-34.618, -58.437],
-        'urquiza': [-34.573, -58.481], 'nuñez': [-34.545, -58.465],
-        'almagro': [-34.609, -58.422], 'flores': [-34.629, -58.463]
+    renderKanban(filtered);
+    renderMap(filtered);
+    renderAnalytics(filtered);
+}
+
+function renderKanban(data) {
+    const cols = {
+        'Pendiente': document.getElementById('col-pendientes'),
+        'Contactado': document.getElementById('col-contactados'),
+        'Cerrado': document.getElementById('col-cerrados'),
+        'Descartado': document.getElementById('col-descartados')
     };
+    
+    // Clear cols
+    for(let k in cols) cols[k].innerHTML = '';
+
+    let pipelineActive = 0;
+    let revenueGen = 0;
+    let counts = { 'Pendiente': 0, 'Contactado': 0, 'Cerrado': 0, 'Descartado': 0 };
+
+    data.forEach(m => {
+        let st = m._estadoNorm;
+        counts[st]++;
+        
+        if(st === 'Pendiente' || st === 'Contactado') pipelineActive += m._comisionPotencial;
+        if(st === 'Cerrado') revenueGen += m._comisionPotencial;
+
+        // Limitar renderizado para performance (max 30 por columna visualizados)
+        if(counts[st] > 30) return;
+
+        const card = document.createElement('div');
+        card.className = "kanban-card bg-zinc-900 border border-zinc-700/50 rounded-lg p-3 shadow-md hover:border-zinc-500 transition-colors";
+        
+        // Botones de accion dependiento del estado
+        let actionButtons = '';
+        if(st === 'Pendiente') {
+            actionButtons = `
+                <div class="flex gap-2 mt-3 pt-3 border-t border-zinc-800">
+                    <button onclick="window.actualizarEstado('${m.ID}', 'Contactado ✅', this)" class="flex-1 bg-zinc-800 hover:bg-warning/20 text-warning text-[10px] font-bold py-1.5 rounded transition">EN GESTIÓN</button>
+                    <button onclick="window.actualizarEstado('${m.ID}', 'Descartado ❌', this)" class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-[10px] font-bold py-1.5 rounded transition">DESCARTAR</button>
+                </div>
+            `;
+        } else if(st === 'Contactado') {
+            actionButtons = `
+                <div class="flex gap-2 mt-3 pt-3 border-t border-zinc-800">
+                    <button onclick="window.actualizarEstado('${m.ID}', 'Cerrado ✅', this)" class="flex-1 bg-zinc-800 hover:bg-accent/20 text-accent text-[10px] font-bold py-1.5 rounded transition">CERRAR MATCH</button>
+                    <button onclick="window.actualizarEstado('${m.ID}', 'Descartado ❌', this)" class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-[10px] font-bold py-1.5 rounded transition">PERDIDO</button>
+                </div>
+            `;
+        }
+
+        card.innerHTML = `
+            <div class="flex justify-between items-start mb-2">
+                <div class="font-bold text-sm text-zinc-200">Lead ${m['Comprador - Asesor WA']}</div>
+                <div class="text-[10px] font-mono text-accent bg-accent/10 px-1.5 py-0.5 rounded border border-accent/20">$${m._comisionPotencial.toLocaleString()}</div>
+            </div>
+            <p class="text-xs text-zinc-400 line-clamp-1 mb-1">Busca: ${m['Comprador - Zonas Buscadas']}</p>
+            <div class="flex items-center gap-2 mt-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                <p class="text-[11px] text-zinc-300 line-clamp-1">${m['Tipo Propiedad']} en <span class="capitalize">${m._barrioLower}</span></p>
+            </div>
+            <div class="flex justify-between items-center mt-2 text-[10px] text-zinc-500">
+                <span>Asesor: ${m.Asesor}</span>
+                <span>${m.Fuente}</span>
+            </div>
+            ${actionButtons}
+        `;
+        cols[st].appendChild(card);
+    });
+
+    document.getElementById('count-pendientes').innerText = counts['Pendiente'];
+    document.getElementById('count-contactados').innerText = counts['Contactado'];
+    document.getElementById('count-cerrados').innerText = counts['Cerrado'];
+    document.getElementById('count-descartados').innerText = counts['Descartado'];
+
+    document.getElementById('kpi-pipeline').innerText = 'USD ' + pipelineActive.toLocaleString('es-AR');
+    document.getElementById('kpi-revenue').innerText = 'USD ' + revenueGen.toLocaleString('es-AR');
+}
+
+function renderMap(data) {
+    if (heatLayer) map.removeLayer(heatLayer);
+    if (markersLayer) map.removeLayer(markersLayer);
     
     const heatData = [];
     const markersData = [];
     const conteoBarrios = {};
 
-    filteredRows.forEach(r => {
-        if (r.Estado && r.Estado.includes("Cerrado")) cerrados++;
-        comisionTotal += r._comisionPotencial;
-        
-        const f = (r.Fuente || "").toLowerCase();
-        if (f.includes('facebook')) fb++; else if (f.includes('mercado')) ml++; else zp++;
-        if (r['Comprador - Teléfono']) compradoresUnique.add(r['Comprador - Teléfono']);
-
-        // Geocoding Simulado de Alta Densidad
+    data.forEach(r => {
         let lat = -34.6037 + (Math.random() * 0.1 - 0.05);
         let lng = -58.3816 + (Math.random() * 0.1 - 0.05);
         
@@ -139,91 +216,112 @@ function renderDashboard() {
             }
         }
         heatData.push([lat, lng, 0.8]);
-        markersData.push({lat, lng, title: r['Tipo Propiedad'] + ' en ' + r._barrioLower, price: r._precioNum, id: r.ID});
+        if(r._estadoNorm === 'Pendiente' || r._estadoNorm === 'Contactado') {
+            markersData.push({lat, lng, title: r['Tipo Propiedad'] + ' en ' + r._barrioLower, price: r._precioNum, id: r.ID, st: r._estadoNorm});
+        }
     });
 
-    // Actualizar UI KPIs
-    document.getElementById('kpi-inventario').innerText = '26,447'; 
-    document.getElementById('kpi-compradores').innerText = compradoresUnique.size;
-    document.getElementById('kpi-matches').innerText = totalMatches;
-    document.getElementById('kpi-conversion').innerText = totalMatches > 0 ? ((cerrados / totalMatches) * 100).toFixed(1) + '%' : '0%';
-    document.getElementById('kpi-comision').innerText = 'USD ' + comisionTotal.toLocaleString('es-AR');
-
-    // ── 3. Actualizar Mapa ──────────────────────────────────────────────────
-    if (heatLayer) map.removeLayer(heatLayer);
-    if (markersLayer) map.removeLayer(markersLayer);
-    
-    heatLayer = L.heatLayer(heatData, { radius: 20, blur: 15, maxZoom: 14, gradient: {0.4: 'blue', 0.6: 'cyan', 0.8: 'yellow', 1.0: 'red'} }).addTo(map);
+    heatLayer = L.heatLayer(heatData, { radius: 25, blur: 20, maxZoom: 14, gradient: {0.4: 'blue', 0.6: 'cyan', 0.8: 'yellow', 1.0: 'red'} }).addTo(map);
     
     markersLayer = L.layerGroup().addTo(map);
-    // Solo mostrar los primeros 50 marcadores para no saturar el navegador
-    markersData.slice(0, 50).forEach(m => {
-        L.marker([m.lat, m.lng]).addTo(markersLayer).bindPopup(`<b>${m.title}</b><br>USD ${m.price.toLocaleString()}<br>ID: ${m.id}`);
-    });
-
-    // ── 4. Gráfico Chart.js ─────────────────────────────────────────────────
-    if (portalesChart) portalesChart.destroy();
-    const ctx = document.getElementById('portalesChart').getContext('2d');
-    portalesChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: ['ZonaProp', 'MercadoLibre', 'Facebook'],
-            datasets: [{ data: [zp, ml, fb], backgroundColor: ['#8b5cf6', '#f59e0b', '#3b82f6'], borderWidth: 0 }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '70%' }
-    });
-
-    // ── 5. Tinder Cards (Tomar pendientes) ──────────────────────────────────
-    const tinderContainer = document.getElementById('tinder-container');
-    tinderContainer.innerHTML = '';
-    
-    const pendientes = filteredRows.filter(r => r.Estado === 'Pendiente').slice(0, 15);
-    
-    if(pendientes.length === 0) {
-        tinderContainer.innerHTML = '<p class="text-gray-500 p-4">No hay oportunidades en esta vista.</p>';
-    } else {
-        pendientes.forEach(m => {
-            const card = document.createElement('div');
-            card.className = "tinder-card-item flex flex-col sm:flex-row bg-white/5 border border-white/10 rounded-xl p-4 shadow-lg hover:bg-white/10 transition backdrop-blur-sm";
-            card.innerHTML = `
-                <div class="flex-1">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">👤</div>
-                            <div>
-                                <span class="font-bold text-white block">Lead ${m['Comprador - Asesor WA']}</span>
-                                <span class="text-[10px] text-gray-400 uppercase tracking-wider">Asesor: ${m.Asesor}</span>
-                            </div>
-                        </div>
-                        <span class="text-xs px-3 py-1 bg-neonGreen/20 border border-neonGreen/30 rounded-full text-neonGreen font-bold shadow-[0_0_10px_rgba(0,242,96,0.2)]">USD ${m._comisionPotencial.toLocaleString('es-AR')}</span>
-                    </div>
-                    <p class="text-sm text-gray-300 mb-3 bg-black/20 p-2 rounded-lg border border-white/5"><span class="text-accent">Busca:</span> ${m['Comprador - Zonas Buscadas']} | USD ${m['Comprador - Presupuesto']}</p>
-                    <div class="flex items-start gap-3 mt-3 pt-3 border-t border-white/10">
-                        <div class="w-8 h-8 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center text-sm border border-orange-500/30">🏠</div>
-                        <div>
-                            <p class="font-bold text-white text-sm">${m['Tipo Propiedad']} en <span class="capitalize">${m._barrioLower}</span></p>
-                            <p class="text-xs text-gray-400 mt-1">${m['Ambientes Prop.'] || m['Amb'] || '?'} amb | USD ${m['Precio Publicado'] || m['Precio']} • <span class="text-blue-400">${m.Fuente}</span></p>
-                        </div>
-                    </div>
-                </div>
-                <div class="flex sm:flex-col gap-3 justify-center border-t sm:border-t-0 sm:border-l border-white/10 pt-4 sm:pt-0 sm:pl-4 mt-4 sm:mt-0">
-                    <button onclick="window.actualizarEstado('${m.ID}', 'Contactado', this)" class="tinder-btn w-12 h-12 rounded-full bg-green-500/20 text-green-400 border border-green-500/30 flex items-center justify-center hover:bg-green-500 hover:text-white transition-all transform hover:scale-110 shadow-[0_0_15px_rgba(34,197,94,0.3)]" title="Aceptar (Contactado)">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                    </button>
-                    <button onclick="window.actualizarEstado('${m.ID}', 'Descartado ❌', this)" class="tinder-btn w-12 h-12 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all transform hover:scale-110 shadow-[0_0_15px_rgba(239,68,68,0.3)]" title="Descartar">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
-                </div>
-            `;
-            tinderContainer.appendChild(card);
+    markersData.slice(0, 100).forEach(m => {
+        let color = m.st === 'Contactado' ? 'orange' : 'blue';
+        const icon = L.divIcon({
+            className: 'custom-div-icon',
+            html: `<div style="background-color:${color}; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>`,
+            iconSize: [12, 12], iconAnchor: [6, 6]
         });
-    }
+        L.marker([m.lat, m.lng], {icon: icon}).addTo(markersLayer).bindPopup(`
+            <div style="color:black">
+                <b>${m.title}</b><br>USD ${m.price.toLocaleString()}<br>ID: ${m.id}
+            </div>
+        `);
+    });
 
-    // Top Zonas
     const topZonasList = Object.entries(conteoBarrios).sort((a,b) => b[1] - a[1]).slice(0, 5);
-    const topZonas = document.getElementById('top-zonas-container');
+    const topZonas = document.getElementById('map-zonas-legend');
     topZonas.innerHTML = '';
     topZonasList.forEach(z => {
-        topZonas.innerHTML += `<div class="flex justify-between items-center text-sm"><span class="font-bold capitalize">${z[0]}</span><span class="text-gray-500">${z[1]} Matches</span></div>`;
+        topZonas.innerHTML += `<div class="flex justify-between items-center w-48"><span class="capitalize text-zinc-200">${z[0]}</span><span class="text-primary font-mono">${z[1]}</span></div>`;
+    });
+}
+
+function renderAnalytics(data) {
+    // 1. Leaderboard
+    const asesores = ['Joel', 'David', 'Vicente', 'Claudia'];
+    let stats = {};
+    asesores.forEach(a => stats[a] = { pipeline: 0, revenue: 0, wins: 0, total: 0 });
+
+    data.forEach(m => {
+        const ag = asesores.find(a => (m.Asesor || '').includes(a));
+        if(ag) {
+            stats[ag].total++;
+            if(m._estadoNorm === 'Pendiente' || m._estadoNorm === 'Contactado') stats[ag].pipeline += m._comisionPotencial;
+            if(m._estadoNorm === 'Cerrado') {
+                stats[ag].revenue += m._comisionPotencial;
+                stats[ag].wins++;
+            }
+        }
+    });
+
+    const lbContainer = document.getElementById('leaderboard-container');
+    lbContainer.innerHTML = '';
+    
+    // Sort by revenue descending
+    let sorted = Object.keys(stats).map(k => ({name: k, ...stats[k]})).sort((a,b) => b.revenue - a.revenue);
+    
+    sorted.forEach((s, idx) => {
+        let rankColor = idx === 0 ? 'text-warning' : 'text-zinc-500';
+        lbContainer.innerHTML += `
+            <div class="bg-zinc-800/30 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded bg-zinc-700 flex items-center justify-center font-bold text-white">${s.name.charAt(0)}</div>
+                        <span class="font-bold text-zinc-200">${s.name}</span>
+                    </div>
+                    <span class="font-bold ${rankColor}">#${idx+1}</span>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-zinc-500">Revenue</span>
+                        <span class="text-accent font-bold font-mono">$${s.revenue.toLocaleString()}</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                        <span class="text-zinc-500">Pipeline Activo</span>
+                        <span class="text-zinc-300 font-mono">$${s.pipeline.toLocaleString()}</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                        <span class="text-zinc-500">Win Rate</span>
+                        <span class="text-zinc-300 font-mono">${s.total > 0 ? Math.round((s.wins/s.total)*100) : 0}%</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    // 2. Charts
+    let fb = 0, ml = 0, zp = 0;
+    let counts = { 'Pendiente': 0, 'Contactado': 0, 'Cerrado': 0, 'Descartado': 0 };
+    data.forEach(m => {
+        const f = (m.Fuente || "").toLowerCase();
+        if (f.includes('facebook')) fb++; else if (f.includes('mercado')) ml++; else zp++;
+        counts[m._estadoNorm]++;
+    });
+
+    if (chartFuentes) chartFuentes.destroy();
+    chartFuentes = new Chart(document.getElementById('chart-fuentes').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels: ['ZonaProp', 'MercadoLibre', 'Facebook'], datasets: [{ data: [zp, ml, fb], backgroundColor: ['#8b5cf6', '#f59e0b', '#3b82f6'], borderColor: '#18181b', borderWidth: 2 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'bottom', labels: { color: '#a1a1aa' } } } }
+    });
+
+    if (chartEstados) chartEstados.destroy();
+    chartEstados = new Chart(document.getElementById('chart-estados').getContext('2d'), {
+        type: 'bar',
+        data: { 
+            labels: ['Nuevos', 'En Gestión', 'Ganados', 'Perdidos'], 
+            datasets: [{ label: 'Leads', data: [counts['Pendiente'], counts['Contactado'], counts['Cerrado'], counts['Descartado']], backgroundColor: ['#3b82f6', '#f59e0b', '#10b981', '#52525b'], borderRadius: 4 }] 
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { display: false }, x: { grid: { display: false }, ticks: { color: '#a1a1aa' } } }, plugins: { legend: { display: false } } }
     });
 }
