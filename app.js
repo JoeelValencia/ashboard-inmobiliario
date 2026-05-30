@@ -71,6 +71,9 @@ function renderDashboard() {
     const barrioFiltro = document.getElementById('filter-barrio-base').value;
     const comisionFiltro = parseInt(document.getElementById('filter-comision').value) || 0;
 
+    const userDisplay = document.getElementById('current-user-display');
+    if(userDisplay) userDisplay.innerText = asesorFiltro === "Todos" ? "Equipo Completo" : asesorFiltro;
+
     // ── 1. Filtrado de Datos ────────────────────────────────────────────────
     let filteredRows = globalData;
 
@@ -181,28 +184,35 @@ function renderDashboard() {
     } else {
         pendientes.forEach(m => {
             const card = document.createElement('div');
-            card.className = "tinder-card-item flex bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition";
+            card.className = "tinder-card-item flex flex-col sm:flex-row bg-white/5 border border-white/10 rounded-xl p-4 shadow-lg hover:bg-white/10 transition backdrop-blur-sm";
             card.innerHTML = `
                 <div class="flex-1">
-                    <div class="flex items-center justify-between mb-2">
-                        <div class="flex items-center gap-2">
-                            <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">👤</div>
-                            <span class="font-bold text-sm">Lead ${m['Comprador - Asesor WA']}</span>
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">👤</div>
+                            <div>
+                                <span class="font-bold text-white block">Lead ${m['Comprador - Asesor WA']}</span>
+                                <span class="text-[10px] text-gray-400 uppercase tracking-wider">Asesor: ${m.Asesor}</span>
+                            </div>
                         </div>
-                        <span class="text-xs px-2 py-1 bg-green-100 rounded-full text-green-700 font-bold">Comisión: USD ${m._comisionPotencial.toLocaleString('es-AR')}</span>
+                        <span class="text-xs px-3 py-1 bg-neonGreen/20 border border-neonGreen/30 rounded-full text-neonGreen font-bold shadow-[0_0_10px_rgba(0,242,96,0.2)]">USD ${m._comisionPotencial.toLocaleString('es-AR')}</span>
                     </div>
-                    <p class="text-xs text-gray-500 mb-2">Busca: ${m['Comprador - Zonas Buscadas']} | USD ${m['Comprador - Presupuesto']}</p>
-                    <div class="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-                        <div class="w-6 h-6 rounded bg-orange-100 text-orange-600 flex items-center justify-center text-xs">🏠</div>
+                    <p class="text-sm text-gray-300 mb-3 bg-black/20 p-2 rounded-lg border border-white/5"><span class="text-accent">Busca:</span> ${m['Comprador - Zonas Buscadas']} | USD ${m['Comprador - Presupuesto']}</p>
+                    <div class="flex items-start gap-3 mt-3 pt-3 border-t border-white/10">
+                        <div class="w-8 h-8 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center text-sm border border-orange-500/30">🏠</div>
                         <div>
-                            <p class="font-bold text-xs">${m['Tipo Propiedad']} en ${m._barrioLower}</p>
-                            <p class="text-xs text-gray-500">${m['Ambientes Prop.'] || m['Amb'] || '?'} amb | USD ${m['Precio Publicado'] || m['Precio']} • ${m.Fuente}</p>
+                            <p class="font-bold text-white text-sm">${m['Tipo Propiedad']} en <span class="capitalize">${m._barrioLower}</span></p>
+                            <p class="text-xs text-gray-400 mt-1">${m['Ambientes Prop.'] || m['Amb'] || '?'} amb | USD ${m['Precio Publicado'] || m['Precio']} • <span class="text-blue-400">${m.Fuente}</span></p>
                         </div>
                     </div>
                 </div>
-                <div class="flex flex-col gap-2 justify-center border-l border-gray-100 pl-4 ml-4">
-                    <button onclick="window.actualizarEstado('${m.ID}', 'Contactado', this)" class="tinder-btn w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center hover:bg-green-200" title="Aceptar (Contactado)">✅</button>
-                    <button onclick="window.actualizarEstado('${m.ID}', 'Descartado ❌', this)" class="tinder-btn w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200" title="Descartar">❌</button>
+                <div class="flex sm:flex-col gap-3 justify-center border-t sm:border-t-0 sm:border-l border-white/10 pt-4 sm:pt-0 sm:pl-4 mt-4 sm:mt-0">
+                    <button onclick="window.actualizarEstado('${m.ID}', 'Contactado', this)" class="tinder-btn w-12 h-12 rounded-full bg-green-500/20 text-green-400 border border-green-500/30 flex items-center justify-center hover:bg-green-500 hover:text-white transition-all transform hover:scale-110 shadow-[0_0_15px_rgba(34,197,94,0.3)]" title="Aceptar (Contactado)">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    </button>
+                    <button onclick="window.actualizarEstado('${m.ID}', 'Descartado ❌', this)" class="tinder-btn w-12 h-12 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all transform hover:scale-110 shadow-[0_0_15px_rgba(239,68,68,0.3)]" title="Descartar">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
                 </div>
             `;
             tinderContainer.appendChild(card);

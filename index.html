@@ -1,85 +1,122 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Módulo de Matching Inmobiliario - Análisis Geográfico</title>
-    
-    <!-- Tailwind CSS -->
+    <title>Dashboard Inmobiliario - Premium Dark Mode</title>
+    <!-- Tailwind CSS (CDN for testing) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css">
-    
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
                     colors: {
-                        dark: '#1F2937',
-                        card: '#ffffff',
-                        accent: '#FD5068', // Tinder pink
-                        accentLight: '#FFE5E9'
+                        darkBg: '#0b0f19',
+                        glassBg: 'rgba(20, 25, 40, 0.6)',
+                        glassBorder: 'rgba(255, 255, 255, 0.08)',
+                        accent: '#ff2a5f',
+                        accentHover: '#ff4d79',
+                        neonGreen: '#00f260',
+                        neonBlue: '#00c3ff'
                     }
                 }
             }
         }
     </script>
+    <!-- CSS Propio -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Fuentes de Google -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS para Mapas -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { font-family: 'Outfit', sans-serif; background-color: #0b0f19; background-image: radial-gradient(circle at top right, rgba(255,42,95,0.1) 0%, transparent 40%), radial-gradient(circle at bottom left, rgba(0,195,255,0.1) 0%, transparent 40%); background-attachment: fixed; color: #e2e8f0; }
+        
+        .glass-panel {
+            background: rgba(20, 25, 40, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+        /* Input styling overrides */
+        select, input[type="number"] {
+            background-color: rgba(0,0,0,0.3) !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            color: white !important;
+        }
+        select option { background-color: #1a202c; color: white; }
+    </style>
 </head>
-<body class="bg-dark text-gray-800 p-6 min-h-screen">
+<body class="min-h-screen p-4 md:p-6 lg:p-8">
     
     <div class="max-w-7xl mx-auto space-y-6">
         
         <!-- Header / Login -->
-        <div class="flex justify-between items-center bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <h1 class="font-bold text-xl text-gray-800">C21 Ventas - CRM Activo</h1>
+        <div class="flex flex-col md:flex-row justify-between items-center glass-panel rounded-2xl p-5">
+            <div class="flex items-center gap-4 mb-4 md:mb-0">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-accent to-orange-500 flex items-center justify-center shadow-lg shadow-accent/20">
+                    <span class="text-white font-bold text-xl">C21</span>
+                </div>
+                <div>
+                    <h1 class="font-bold text-xl md:text-2xl text-white tracking-wide">Nexus<span class="text-accent"> CRM</span></h1>
+                    <p class="text-xs text-gray-400">Inteligencia Inmobiliaria Espacial</p>
+                </div>
+            </div>
+            
             <div class="flex items-center gap-3">
-                <span class="text-sm font-semibold text-gray-500">Trabajando como:</span>
-                <select id="select-asesor" class="bg-gray-100 border border-gray-200 rounded-lg px-4 py-2 font-bold text-accent focus:ring-accent focus:border-accent">
-                    <option value="Todos">Equipo Completo</option>
-                    <option value="Joel">Joel</option>
-                    <option value="Vicente">Vicente</option>
-                    <option value="David">David</option>
-                    <option value="Claudia">Claudia</option>
-                </select>
+                <div class="flex flex-col text-right hidden sm:flex">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Asesor Activo</span>
+                    <span class="text-sm font-bold text-white" id="current-user-display">Equipo Completo</span>
+                </div>
+                <div class="relative">
+                    <select id="select-asesor" class="appearance-none pl-4 pr-10 py-3 rounded-xl cursor-pointer font-bold transition-all focus:outline-none focus:ring-2 focus:ring-accent">
+                        <option value="Todos">👁️ Vista General</option>
+                        <option value="Joel">Joel</option>
+                        <option value="Vicente">Vicente</option>
+                        <option value="David">David</option>
+                        <option value="Claudia">Claudia</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- Header / Top KPIs -->
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <!-- KPI 1 -->
-            <div class="glass-card rounded-2xl p-4 border-t-4 border-accent flex flex-col items-center justify-center">
-                <span class="text-xs font-bold text-gray-500 uppercase text-center">Matches Totales</span>
-                <span class="text-2xl font-bold text-gray-900 mt-2" id="kpi-matches">...</span>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div class="glass-panel rounded-2xl p-5 flex flex-col items-center justify-center transform transition hover:scale-105 border-b-4 border-b-transparent hover:border-b-blue-500">
+                <span class="text-xs font-bold text-gray-400 uppercase tracking-widest text-center mb-1">Matches</span>
+                <span class="text-3xl font-extrabold text-white" id="kpi-matches">...</span>
             </div>
-            <!-- KPI 2 -->
-            <div class="glass-card rounded-2xl p-4 border-t-4 border-accent flex flex-col items-center justify-center">
-                <span class="text-xs font-bold text-gray-500 uppercase text-center">Compradores Activos</span>
-                <span class="text-2xl font-bold text-gray-900 mt-2" id="kpi-compradores">...</span>
+            
+            <div class="glass-panel rounded-2xl p-5 flex flex-col items-center justify-center transform transition hover:scale-105 border-b-4 border-b-transparent hover:border-b-purple-500">
+                <span class="text-xs font-bold text-gray-400 uppercase tracking-widest text-center mb-1">Compradores</span>
+                <span class="text-3xl font-extrabold text-white" id="kpi-compradores">...</span>
             </div>
-            <!-- KPI 3 -->
-            <div class="glass-card rounded-2xl p-4 border-t-4 border-accent flex flex-col items-center justify-center">
-                <span class="text-xs font-bold text-gray-500 uppercase text-center">Conversión</span>
-                <span class="text-2xl font-bold text-gray-900 mt-2" id="kpi-conversion">...</span>
+            
+            <div class="glass-panel rounded-2xl p-5 flex flex-col items-center justify-center transform transition hover:scale-105 border-b-4 border-b-transparent hover:border-b-accent">
+                <span class="text-xs font-bold text-gray-400 uppercase tracking-widest text-center mb-1">Conversión</span>
+                <span class="text-3xl font-extrabold text-white" id="kpi-conversion">...</span>
             </div>
-            <!-- KPI 4 -->
-            <div class="glass-card rounded-2xl p-4 border-t-4 border-green-500 flex flex-col items-center justify-center bg-green-50">
-                <span class="text-xs font-bold text-green-700 uppercase text-center">Comisión Potencial (6%)</span>
-                <span class="text-2xl font-bold text-green-600 mt-2" id="kpi-comision">...</span>
+            
+            <div class="glass-panel rounded-2xl p-5 flex flex-col items-center justify-center transform transition hover:scale-105 border-b-4 border-b-neonGreen relative overflow-hidden col-span-2 md:col-span-1">
+                <div class="absolute inset-0 bg-neonGreen opacity-5"></div>
+                <span class="text-xs font-bold text-neonGreen uppercase tracking-widest text-center mb-1 z-10">Comisión (6%)</span>
+                <span class="text-2xl md:text-3xl font-extrabold text-white z-10" id="kpi-comision">...</span>
             </div>
-            <!-- KPI 5 -->
-            <div class="glass-card rounded-2xl p-4 border-t-4 border-accent flex flex-col items-center justify-center">
-                <span class="text-xs font-bold text-gray-500 uppercase text-center">Prop. Disponibles</span>
-                <span class="text-2xl font-bold text-gray-900 mt-2" id="kpi-inventario">...</span>
+            
+            <div class="glass-panel rounded-2xl p-5 flex flex-col items-center justify-center transform transition hover:scale-105 border-b-4 border-b-transparent hover:border-b-orange-500 col-span-2 md:col-span-1">
+                <span class="text-xs font-bold text-gray-400 uppercase tracking-widest text-center mb-1">Inventario</span>
+                <span class="text-3xl font-extrabold text-white" id="kpi-inventario">...</span>
             </div>
         </div>
 
@@ -87,104 +124,93 @@
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
             
             <!-- Left Sidebar: Filters -->
-            <div class="glass-card rounded-2xl p-6 col-span-1 space-y-5">
-                <h3 class="font-bold text-gray-800 mb-2 uppercase tracking-wide text-sm">Filtros de Trabajo</h3>
+            <div class="glass-panel rounded-2xl p-6 col-span-1 space-y-6 self-start">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-accent">⚡</span>
+                    <h3 class="font-bold text-white uppercase tracking-widest text-sm">Filtros Tácticos</h3>
+                </div>
                 
-                <div class="space-y-1">
-                    <label class="text-xs font-semibold text-gray-600">Mi Barrio Base (Cercanía)</label>
-                    <select class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-accent" id="filter-barrio-base">
-                        <option value="all">Ver toda CABA</option>
+                <div class="space-y-2">
+                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider">📍 Mi Base (Logística)</label>
+                    <select class="w-full rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-accent outline-none transition-all" id="filter-barrio-base">
+                        <option value="all">Toda la Ciudad</option>
                         <option value="palermo">Palermo / Recoleta / Belgrano</option>
                         <option value="caballito">Caballito / Almagro / Flores</option>
-                        <option value="villa urquiza">Villa Urquiza / Nuñez / Saavedra</option>
-                    </select>
-                </div>
-                
-                <div class="space-y-1">
-                    <label class="text-xs font-semibold text-gray-600">Comisión Mínima (USD)</label>
-                    <select class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-accent" id="filter-comision">
-                        <option value="0">Sin mínimo</option>
-                        <option value="5000">Mayor a USD 5.000</option>
-                        <option value="10000">Mayor a USD 10.000</option>
-                        <option value="20000">Mayor a USD 20.000</option>
+                        <option value="villa urquiza">Villa Urquiza / Nuñez</option>
                     </select>
                 </div>
                 
                 <div class="space-y-2">
-                    <label class="text-sm font-semibold text-gray-600">Rango de Precio</label>
-                    <div class="flex gap-2">
-                        <input type="number" placeholder="Min" class="w-1/2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm">
-                        <input type="number" placeholder="Max" class="w-1/2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm">
-                    </div>
-                </div>
-                
-                <div class="space-y-2">
-                    <label class="text-sm font-semibold text-gray-600">Tipo de Propiedad</label>
-                    <select class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm">
-                        <option>Todos</option>
-                        <option>Departamento</option>
-                        <option>PH</option>
-                        <option>Casa</option>
+                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider">💰 Filtro de Comisión</label>
+                    <select class="w-full rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-neonGreen outline-none transition-all" id="filter-comision">
+                        <option value="0">Ver Todo</option>
+                        <option value="5000">> USD 5.000</option>
+                        <option value="10000">> USD 10.000</option>
+                        <option value="20000">> USD 20.000</option>
                     </select>
                 </div>
             </div>
 
-            <!-- Center: Map and Tinder Cards -->
+            <!-- Center: Tinder Cards & Map -->
             <div class="col-span-1 lg:col-span-2 flex flex-col gap-6">
                 
-                <!-- Tinder Cards -->
-                <div class="glass-card rounded-2xl p-6">
-                    <h3 class="font-bold text-gray-800 mb-4 uppercase tracking-wide">💖 Oportunidades de Coincidencia (Tinder-Style)</h3>
-                    <div class="space-y-4" id="tinder-container">
-                        <!-- Card Skeleton -->
-                        <div class="animate-pulse flex space-x-4 bg-gray-50 rounded-xl p-4">
-                            <div class="rounded-full bg-gray-200 h-10 w-10"></div>
+                <!-- Tinder Cards Container -->
+                <div class="glass-panel rounded-2xl p-0 overflow-hidden flex flex-col border border-glassBorder">
+                    <div class="p-5 border-b border-glassBorder bg-white/5 flex justify-between items-center">
+                        <h3 class="font-bold text-white uppercase tracking-widest text-sm flex items-center gap-2">
+                            <span class="text-accent animate-pulse">●</span> Oportunidades
+                        </h3>
+                        <span class="text-xs text-gray-400 bg-black/30 px-2 py-1 rounded-md">Scroll para ver más ↓</span>
+                    </div>
+                    
+                    <!-- Scrollable Area -->
+                    <div class="p-5 space-y-4 max-h-[500px] overflow-y-auto custom-scrollbar" id="tinder-container">
+                        <!-- Skeleton -->
+                        <div class="animate-pulse flex space-x-4 bg-white/5 rounded-xl p-4 border border-white/5">
+                            <div class="rounded-full bg-white/10 h-10 w-10"></div>
                             <div class="flex-1 space-y-4 py-1">
-                                <div class="h-2 bg-gray-200 rounded w-3/4"></div>
+                                <div class="h-2 bg-white/10 rounded w-3/4"></div>
                                 <div class="space-y-2">
-                                    <div class="h-2 bg-gray-200 rounded"></div>
-                                    <div class="h-2 bg-gray-200 rounded w-5/6"></div>
+                                    <div class="h-2 bg-white/10 rounded w-5/6"></div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Heatmap -->
-                <div class="glass-card rounded-2xl p-6 flex-1 flex flex-col min-h-[400px]">
-                    <h3 class="font-bold text-gray-800 mb-4 uppercase tracking-wide">🔥 Mapa de Presión y Absorción de Mercado</h3>
-                    <div id="map" class="w-full flex-1 rounded-xl overflow-hidden border border-gray-200"></div>
+                <!-- Map -->
+                <div class="glass-panel rounded-2xl p-0 overflow-hidden flex flex-col h-[400px] relative border border-glassBorder">
+                    <div class="absolute top-4 left-4 z-[400] bg-black/60 backdrop-blur-md px-4 py-2 rounded-lg border border-white/10 pointer-events-none">
+                        <h3 class="font-bold text-white uppercase tracking-widest text-xs flex items-center gap-2">
+                            <span class="text-orange-500">🔥</span> Radar Inmobiliario
+                        </h3>
+                    </div>
+                    <!-- The map element uses z-index 0 to not overlap dropdowns -->
+                    <div id="map" class="w-full h-full z-0 filter brightness-90 contrast-125 saturate-150 invert-[0.9] hue-rotate-180"></div>
                 </div>
 
             </div>
 
             <!-- Right Sidebar: Charts -->
-            <div class="col-span-1 flex flex-col gap-6">
+            <div class="col-span-1 flex flex-col gap-6 h-full">
                 
-                <div class="glass-card rounded-2xl p-6">
-                    <h3 class="font-bold text-gray-800 mb-4 uppercase tracking-wide text-sm">Top 5 Zonas por Lead Scoring</h3>
-                    <div id="top-zonas-container" class="space-y-3">
-                        <div class="animate-pulse h-4 bg-gray-200 rounded w-full"></div>
-                        <div class="animate-pulse h-4 bg-gray-200 rounded w-full"></div>
-                        <div class="animate-pulse h-4 bg-gray-200 rounded w-full"></div>
+                <div class="glass-panel rounded-2xl p-6">
+                    <h3 class="font-bold text-white mb-4 uppercase tracking-widest text-sm border-b border-glassBorder pb-2">Top 5 Zonas</h3>
+                    <div id="top-zonas-container" class="space-y-4 mt-4">
+                        <div class="animate-pulse h-4 bg-white/10 rounded w-full"></div>
+                        <div class="animate-pulse h-4 bg-white/10 rounded w-full"></div>
                     </div>
                 </div>
                 
-                <div class="glass-card rounded-2xl p-6 flex-1 flex flex-col">
-                    <h3 class="font-bold text-gray-800 mb-4 uppercase tracking-wide text-sm">Portales y Distribución</h3>
-                    <div class="flex-1 relative">
+                <div class="glass-panel rounded-2xl p-6 flex-1 flex flex-col">
+                    <h3 class="font-bold text-white mb-4 uppercase tracking-widest text-sm border-b border-glassBorder pb-2">Portales</h3>
+                    <div class="flex-1 relative min-h-[200px] mt-4 flex items-center justify-center">
                         <canvas id="portalesChart"></canvas>
                     </div>
                 </div>
-                
-                <!-- Call to action -->
-                <button class="w-full py-4 bg-gradient-to-r from-accent to-red-400 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform transition hover:-translate-y-1">
-                    GESTIONAR MIS CONEXIONES
-                </button>
 
             </div>
         </div>
-
     </div>
 
     <!-- Scripts -->
