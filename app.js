@@ -220,14 +220,40 @@ function aplicarFiltrosMapa() {
         });
     }
 
-    // 2. Filtrar Compradores (Leads del Excel)
+    // 2. Filtrar Compradores Únicos (Leads del Excel Matching)
     let leadsFiltrados = [];
     if (fOperacion === '' || fOperacion === 'comprador') {
-        leadsFiltrados = globalData.filter(l => {
-            if (fBarrio && !l._barrioLower.includes(fBarrio)) return false;
-            // Si hay un filtro de precio máximo y el lead no tiene ese presupuesto, lo filtramos? Mejor no, mostrar todos los leads de la zona
-            return true;
+        const uniqueBuyers = new Map();
+        
+        globalData.forEach(r => {
+            const phone = r['Comprador - Asesor WA'] || '';
+            const pres = r['Comprador - Presupuesto'] || r.Presupuesto || '';
+            const zonas = r['Comprador - Zonas Buscadas'] || r['Zonas Buscadas'] || '';
+            if (!phone && !zonas) return; 
+            
+            const key = phone + '_' + zonas;
+            if (!uniqueBuyers.has(key)) {
+                let mainZone = '';
+                if (zonas) mainZone = zonas.split(',')[0].trim().toLowerCase();
+
+                if (fBarrio && !zonas.toLowerCase().includes(fBarrio)) return;
+
+                uniqueBuyers.set(key, {
+                    phone: phone,
+                    presupuesto: pres,
+                    zonas: zonas,
+                    mainZone: mainZone,
+                    comisionMax: r._comisionPotencial || 0
+                });
+            } else {
+                let existing = uniqueBuyers.get(key);
+                if ((r._comisionPotencial || 0) > existing.comisionMax) {
+                    existing.comisionMax = r._comisionPotencial;
+                }
+            }
         });
+
+        leadsFiltrados = Array.from(uniqueBuyers.values());
     }
 
     document.getElementById('map-total-results').innerText = `${filtrados.length.toLocaleString()} prop. | ${leadsFiltrados.length} compradores`;
@@ -256,7 +282,7 @@ function renderLeadsOnMap(leads) {
     leads.forEach(r => {
         let lat = -34.6037 + (Math.random() * 0.1 - 0.05);
         let lng = -58.3816 + (Math.random() * 0.1 - 0.05);
-        const b = r._barrioLower;
+        const b = r.mainZone;
         
         for (const [key, coords] of Object.entries(barrioCoords)) {
             if (b.includes(key)) {
@@ -266,22 +292,21 @@ function renderLeadsOnMap(leads) {
             }
         }
 
+        const phoneDisplay = r.phone ? r.phone : 'Anónimo';
+
         const leadIcon = L.divIcon({
             className: 'leaflet-div-icon',
-            html: `<div style="background:#10b981; color:white; font-weight:bold; font-size:10px; padding:3px 8px; border-radius:12px; border:2px solid white; box-shadow:0 4px 6px rgba(0,0,0,0.2); white-space:nowrap; transform: translate(-50%, -50%); display:flex; align-items:center; gap:4px; z-index: 1000;">👤 Lead ${r['Comprador - Asesor WA'] || r.Asesor}</div>`,
+            html: `<div style="background:#10b981; color:white; font-weight:bold; font-size:10px; padding:3px 8px; border-radius:12px; border:2px solid white; box-shadow:0 4px 6px rgba(0,0,0,0.2); white-space:nowrap; transform: translate(-50%, -50%); display:flex; align-items:center; gap:4px; z-index: 1000;">👤 Lead ${phoneDisplay}</div>`,
             iconSize: [0, 0], iconAnchor: [0, 0]
         });
-
-        const presupuesto = r['Comprador - Presupuesto'] || r.Presupuesto || '?';
-        const zonas = r['Comprador - Zonas Buscadas'] || r['Zonas Buscadas'] || b;
 
         const leadTooltipHTML = `
             <div class="map-tooltip-card">
                 <div style="background:#10b981; color:white; padding:10px 14px; font-weight:bold; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">👤 Comprador Activo</div>
                 <div style="padding:14px;">
-                    <div style="font-size:14px; font-weight:900; color:#1f2937; margin-bottom:4px;">Presupuesto: USD ${presupuesto}</div>
-                    <div style="font-size:13px; color:#6b7280; font-weight:500; margin-bottom:10px;">Busca: ${zonas}</div>
-                    <div style="font-size:11px; padding:4px 8px; background:#ecfdf5; color:#059669; border-radius:6px; display:inline-block; font-weight:bold; border:1px solid #d1fae5;">💰 Com. Potencial: USD ${r._comisionPotencial.toLocaleString()}</div>
+                    <div style="font-size:14px; font-weight:900; color:#1f2937; margin-bottom:4px;">Presupuesto: USD ${r.presupuesto}</div>
+                    <div style="font-size:13px; color:#6b7280; font-weight:500; margin-bottom:10px;">Busca: ${r.zonas}</div>
+                    <div style="font-size:11px; padding:4px 8px; background:#ecfdf5; color:#059669; border-radius:6px; display:inline-block; font-weight:bold; border:1px solid #d1fae5;">💰 Com. Potencial: USD ${r.comisionMax.toLocaleString()}</div>
                 </div>
             </div>
         `;
