@@ -18,8 +18,17 @@ document.addEventListener('DOMContentLoaded', () => {
         download: true,
         header: true,
         complete: function(results) {
-            const data = results.data;
+            let data = results.data;
             if(data && data.length > 0) {
+                // Limpiar saltos de línea de los nombres de columnas
+                data = data.map(row => {
+                    const cleanRow = {};
+                    for(let key in row) {
+                        const cleanKey = key.replace(/\n/g, '').replace(/\s+/g, ' ').trim();
+                        cleanRow[cleanKey] = row[key];
+                    }
+                    return cleanRow;
+                });
                 procesarDatos(data, map);
             }
         },
@@ -153,8 +162,8 @@ function procesarDatos(data, map) {
                     <div class="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
                         <div class="w-6 h-6 rounded bg-orange-100 text-orange-600 flex items-center justify-center text-xs">🏠</div>
                         <div>
-                            <p class="font-bold text-xs">${m['Tipo Propiedad']} en ${m['Barrio / Zona']}</p>
-                            <p class="text-xs text-gray-500">${m['Ambientes Prop.']} amb | USD ${m['Precio Publicado']} • ${m.Fuente}</p>
+                            <p class="font-bold text-xs">${m['Tipo Propiedad']} en ${m['Barrio / Zona'] || m['Barrio/Zona'] || m['Barrio']}</p>
+                            <p class="text-xs text-gray-500">${m['Ambientes Prop.'] || m['Amb'] || '?'} amb | USD ${m['Precio Publicado'] || m['Precio']} • ${m.Fuente}</p>
                         </div>
                     </div>
                 </div>
