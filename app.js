@@ -1,115 +1,149 @@
-// app.js - Lógica principal del Dashboard Web
+// app.js - Conectado a Google Sheets en tiempo real
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRCE8uHbyUCrZKdBOqGRf5OKx2TqMX-z0VJRZ1YQoS4-5szkZ31fJbc6diA2ydxhQdVBn2h0G1hT1hn/pub?output=csv';
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("Inicializando Dashboard...");
-
-    // ── 1. Inicializar Mapa (Leaflet) ────────────────────────────────────────
-    const map = L.map('map').setView([-34.6037, -58.3816], 12); // Centro CABA
-
+    console.log("Iniciando descarga de datos desde Google Sheets...");
+    
+    // Iniciar Mapa (sin datos todavía)
+    const map = L.map('map').setView([-34.6037, -58.3816], 12);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap contributors © CARTO',
+        attribution: '© OpenStreetMap contributors',
         subdomains: 'abcd',
         maxZoom: 19
     }).addTo(map);
 
-    // Datos simulados de calor (lat, lng, intensidad) - Luego se leerán de Google Sheets
-    const heatData = [
-        [-34.588, -58.430, 0.8], // Palermo
-        [-34.562, -58.456, 0.6], // Belgrano
-        [-34.589, -58.397, 0.5], // Recoleta
-        [-34.573, -58.444, 0.9], // Colegiales
-        [-34.618, -58.437, 0.4]  // Caballito
-    ];
+    // Fetch y Parse del CSV
+    Papa.parse(CSV_URL, {
+        download: true,
+        header: true,
+        complete: function(results) {
+            const data = results.data;
+            if(data && data.length > 0) {
+                procesarDatos(data, map);
+            }
+        },
+        error: function(err) {
+            console.error("Error al cargar CSV:", err);
+            document.getElementById('tinder-container').innerHTML = '<p class="text-red-500 p-4">Error al cargar datos.</p>';
+        }
+    });
+});
 
-    if (typeof L.heatLayer !== 'undefined') {
-        const heat = L.heatLayer(heatData, {
-            radius: 25,
-            blur: 15,
-            maxZoom: 14,
-            gradient: {0.4: 'blue', 0.6: 'cyan', 0.8: 'yellow', 1.0: 'red'}
-        }).addTo(map);
+function procesarDatos(data, map) {
+    // Filtrar filas vacías
+    const rows = data.filter(r => r.ID && r.ID.trim() !== '');
+
+    // ── 1. Calcular KPIs ────────────────────────────────────────────────────
+    const totalMatches = rows.length;
+    let cerrados = 0;
+    let fb = 0, ml = 0, zp = 0;
+    let compradoresUnique = new Set();
+    
+    // Para el mapa (simularemos coordenadas basadas en barrios conocidos de CABA)
+    const barrioCoords = {
+        'palermo': [-34.588, -58.430],
+        'belgrano': [-34.562, -58.456],
+        'recoleta': [-34.589, -58.397],
+        'caballito': [-34.618, -58.437],
+        'villa urquiza': [-34.573, -58.481],
+        'nuñez': [-34.545, -58.465],
+        'almagro': [-34.609, -58.422]
+    };
+    const heatData = [];
+    const conteoBarrios = {};
+
+    rows.forEach(r => {
+        // Estado
+        if (r.Estado && r.Estado.includes("Cerrado")) cerrados++;
+        
+        // Fuentes
+        const f = (r.Fuente || "").toLowerCase();
+        if (f.includes('facebook')) fb++;
+        else if (f.includes('mercado')) ml++;
+        else if (f.includes('zona')) zp++;
+
+        // Compradores únicos (usando teléfono como ID)
+        if (r['Comprador - Teléfono']) compradoresUnique.add(r['Comprador - Teléfono']);
+
+        // Mapa de calor (burbujas)
+        const barrio = (r['Barrio / Zona'] || "").toLowerCase();
+        for (const [key, coords] of Object.entries(barrioCoords)) {
+            if (barrio.includes(key)) {
+                heatData.push([coords[0] + (Math.random()*0.01 - 0.005), coords[1] + (Math.random()*0.01 - 0.005), 0.7]);
+                conteoBarrios[key] = (conteoBarrios[key] || 0) + 1;
+                break;
+            }
+        }
+    });
+
+    // Actualizar UI KPIs
+    document.getElementById('kpi-inventario').innerText = '26,447'; // Total estático por ahora
+    document.getElementById('kpi-compradores').innerText = compradoresUnique.size;
+    document.getElementById('kpi-matches').innerText = totalMatches;
+    document.getElementById('kpi-conversion').innerText = ((cerrados / Math.max(1, totalMatches)) * 100).toFixed(1) + '%';
+
+    // ── 2. Actualizar Mapa ──────────────────────────────────────────────────
+    if (typeof L.heatLayer !== 'undefined' && heatData.length > 0) {
+        L.heatLayer(heatData, { radius: 25, blur: 15, maxZoom: 14, gradient: {0.4: 'blue', 0.6: 'cyan', 0.8: 'yellow', 1.0: 'red'} }).addTo(map);
     }
 
-    // ── 2. Inicializar Gráficos (Chart.js) ──────────────────────────────────
+    // ── 3. Gráfico Chart.js ─────────────────────────────────────────────────
     const ctx = document.getElementById('portalesChart').getContext('2d');
     new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: ['ZonaProp', 'MercadoLibre', 'Facebook'],
             datasets: [{
-                data: [1386, 25024, 37],
+                data: [zp, ml, fb],
                 backgroundColor: ['#8b5cf6', '#f59e0b', '#3b82f6'],
                 borderWidth: 0
             }]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'bottom' }
-            },
-            cutout: '70%'
-        }
+        options: { responsive: true, maintainAspectRatio: false, cutout: '70%' }
     });
 
-    // ── 3. Cargar KPIs Simulados ─────────────────────────────────────────────
-    // Esto luego se reemplazará por un fetch() al CSV de Google Sheets
-    document.getElementById('kpi-inventario').innerText = '26,447';
-    document.getElementById('kpi-compradores').innerText = '50';
-    document.getElementById('kpi-conversion').innerText = '12.5%';
-    document.getElementById('kpi-matches').innerText = '1,569';
-
-    // ── 4. Cargar Tinder Cards ───────────────────────────────────────────────
+    // ── 4. Tinder Cards (Tomar los primeros 15 pendientes) ──────────────────
     const tinderContainer = document.getElementById('tinder-container');
-    const matchesSimulados = [
-        {
-            comprador: "Carlos G. (Joel)",
-            busqueda: "Palermo, Belgrano | USD 180k",
-            propiedad: "Dpto en Av. Santa Fe 3200",
-            propInfo: "3 amb | 85 m² | USD 175k",
-            fuente: "ZP"
-        },
-        {
-            comprador: "Valeria R. (David)",
-            busqueda: "Caballito | USD 120k",
-            propiedad: "PH en Acoyte 120",
-            propInfo: "2 amb | 50 m² | USD 115k",
-            fuente: "ML"
-        }
-    ];
-
-    tinderContainer.innerHTML = ''; // Limpiar skeleton
-    matchesSimulados.forEach(m => {
-        const card = document.createElement('div');
-        card.className = "flex bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition";
-        card.innerHTML = `
-            <div class="flex-1">
-                <div class="flex items-center gap-2 mb-2">
-                    <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">👤</div>
-                    <span class="font-bold text-sm">${m.comprador}</span>
-                </div>
-                <p class="text-xs text-gray-500 mb-2">${m.busqueda}</p>
-                <div class="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-                    <div class="w-6 h-6 rounded bg-orange-100 text-orange-600 flex items-center justify-center text-xs">🏠</div>
-                    <div>
-                        <p class="font-bold text-xs">${m.propiedad}</p>
-                        <p class="text-xs text-gray-500">${m.propInfo} • ${m.fuente}</p>
+    tinderContainer.innerHTML = '';
+    
+    const pendientes = rows.filter(r => r.Estado === 'Pendiente').slice(0, 15);
+    
+    if(pendientes.length === 0) {
+        tinderContainer.innerHTML = '<p class="text-gray-500 p-4">No hay oportunidades pendientes.</p>';
+    } else {
+        pendientes.forEach(m => {
+            const card = document.createElement('div');
+            card.className = "flex bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition";
+            card.innerHTML = `
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">👤</div>
+                        <span class="font-bold text-sm">Lead ${m['Comprador - Asesor WA']}</span>
+                        <span class="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">Asesor: ${m.Asesor}</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-2">${m['Comprador - Zonas Buscadas']} | USD ${m['Comprador - Presupuesto']}</p>
+                    <div class="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                        <div class="w-6 h-6 rounded bg-orange-100 text-orange-600 flex items-center justify-center text-xs">🏠</div>
+                        <div>
+                            <p class="font-bold text-xs">${m['Tipo Propiedad']} en ${m['Barrio / Zona']}</p>
+                            <p class="text-xs text-gray-500">${m['Ambientes Prop.']} amb | USD ${m['Precio Publicado']} • ${m.Fuente}</p>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="flex flex-col gap-2 justify-center border-l border-gray-100 pl-4 ml-4">
-                <button class="tinder-btn w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center hover:bg-green-200">✅</button>
-                <button class="tinder-btn w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200">❌</button>
-            </div>
-        `;
-        tinderContainer.appendChild(card);
-    });
+                <div class="flex flex-col gap-2 justify-center border-l border-gray-100 pl-4 ml-4">
+                    <button onclick="alert('Funcionalidad de escritura en desarrollo. Match: ${m.ID}')" class="tinder-btn w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center hover:bg-green-200">✅</button>
+                    <button onclick="alert('Funcionalidad de escritura en desarrollo. Match: ${m.ID}')" class="tinder-btn w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200">❌</button>
+                </div>
+            `;
+            tinderContainer.appendChild(card);
+        });
+    }
 
     // Top Zonas
+    const topZonasList = Object.entries(conteoBarrios).sort((a,b) => b[1] - a[1]).slice(0, 5);
     const topZonas = document.getElementById('top-zonas-container');
-    topZonas.innerHTML = `
-        <div class="flex justify-between items-center text-sm"><span class="font-bold">Palermo</span><span class="text-gray-500">158 Matches</span></div>
-        <div class="flex justify-between items-center text-sm"><span class="font-bold">Caballito</span><span class="text-gray-500">206 Matches</span></div>
-        <div class="flex justify-between items-center text-sm"><span class="font-bold">Recoleta</span><span class="text-gray-500">143 Matches</span></div>
-    `;
-});
+    topZonas.innerHTML = '';
+    topZonasList.forEach(z => {
+        topZonas.innerHTML += `<div class="flex justify-between items-center text-sm"><span class="font-bold capitalize">${z[0]}</span><span class="text-gray-500">${z[1]} Matches</span></div>`;
+    });
+}
