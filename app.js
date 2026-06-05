@@ -1239,3 +1239,126 @@ window.sortTable = function(col) {
     }
     aplicarFiltro();
 };
+
+/* ─── COMMAND PALETTE (⌘K) ────────────────────────────────── */
+let cmdkSelectedIndex = -1;
+let cmdkResultsData = [];
+
+window.openCmdK = function() {
+    const overlay = document.getElementById('cmdk-overlay');
+    if (overlay.classList.contains('open')) return;
+    overlay.classList.add('open');
+    const input = document.getElementById('cmdk-input');
+    input.value = '';
+    renderCmdkResults();
+    setTimeout(() => input.focus(), 50);
+};
+
+window.closeCmdK = function() {
+    document.getElementById('cmdk-overlay').classList.remove('open');
+};
+
+document.addEventListener('keydown', e => {
+    // Abrir con Cmd+K o Ctrl+K
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        openCmdK();
+    }
+    // Cerrar con Escape
+    if (e.key === 'Escape' && document.getElementById('cmdk-overlay').classList.contains('open')) {
+        closeCmdK();
+    }
+    
+    // Navegación con flechas si está abierto
+    if (document.getElementById('cmdk-overlay').classList.contains('open')) {
+        const items = document.querySelectorAll('.cmdk-item');
+        if (items.length === 0) return;
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            cmdkSelectedIndex = (cmdkSelectedIndex + 1) % items.length;
+            updateCmdkSelection(items);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            cmdkSelectedIndex = (cmdkSelectedIndex - 1 + items.length) % items.length;
+            updateCmdkSelection(items);
+        } else if (e.key === 'Enter' && cmdkSelectedIndex >= 0) {
+            e.preventDefault();
+            items[cmdkSelectedIndex].click();
+        }
+    }
+});
+
+function updateCmdkSelection(items) {
+    items.forEach((item, idx) => {
+        if (idx === cmdkSelectedIndex) {
+            item.classList.add('active');
+            item.scrollIntoView({ block: 'nearest' });
+        } else {
+            item.classList.remove('active');
+        }
+    });
+}
+
+document.getElementById('cmdk-input')?.addEventListener('input', e => {
+    renderCmdkResults(e.target.value);
+});
+
+function renderCmdkResults(query = '') {
+    const q = query.trim().toLowerCase();
+    const container = document.getElementById('cmdk-results');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    cmdkSelectedIndex = -1;
+    
+    if (!q) {
+        container.innerHTML = '<div class="cmdk-empty">Empezá a escribir para buscar...</div>';
+        return;
+    }
+    
+    // Filtrar
+    cmdkResultsData = globalData.filter(d => {
+        const text = ((d._asesor || '') + ' ' + (d._zonas || '') + ' ' + (d._barrioLower || '') + ' ' + (d.Fuente || '')).toLowerCase();
+        return text.includes(q);
+    }).slice(0, 50); // Limitar a 50 resultados
+    
+    if (cmdkResultsData.length === 0) {
+        container.innerHTML = '<div class="cmdk-empty">No se encontraron resultados</div>';
+        return;
+    }
+    
+    cmdkResultsData.forEach((d, idx) => {
+        const el = document.createElement('div');
+        el.className = 'cmdk-item';
+        
+        const scoreColor = d._scoreNum >= 90 ? '#10b981' : d._scoreNum >= 75 ? '#f59e0b' : '#7c3aed';
+        const scoreBg = d._scoreNum >= 90 ? '#d1fae5' : d._scoreNum >= 75 ? '#fef3c7' : '#ede9fe';
+        const precioTxt = d._precioNum > 0 ? 'USD ' + d._precioNum.toLocaleString('es-AR') : 'Consultar';
+        const zonasTxt = (d._barrioLower || d._zonas || '').substring(0, 30);
+        
+        el.innerHTML = `
+            <div class="cmdk-item-score" style="background:${scoreBg};color:${scoreColor}">${d._scoreNum}</div>
+            <div class="cmdk-item-info">
+                <div class="cmdk-item-title">${d._asesor || 'Lead'} <span style="font-weight:400;color:var(--muted);margin-left:4px;">— ${d._estadoNorm || 'Pendiente'}</span></div>
+                <div class="cmdk-item-subtitle">${zonasTxt} • ${d.Fuente || 'Desconocido'}</div>
+            </div>
+            <div class="cmdk-item-price">${precioTxt}</div>
+        `;
+        
+        el._matchData = d;
+        
+        el.addEventListener('click', () => {
+            closeCmdK();
+            
+            // Si la vista actual NO es el Kanban o la tabla, cambiar a Kanban
+            if(document.getElementById('view-kanban').classList.contains('hide')) {
+                switchView('kanban');
+            }
+            
+            abrirDrawer(el);
+        });
+        
+        container.appendChild(el);
+    });
+}
