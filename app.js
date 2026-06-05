@@ -52,7 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
         skipEmptyLines: true,
         complete: function(results) {
             inventarioGlobal = results.data;
-            document.getElementById('map-total-results').innerText = `Mostrando ${inventarioGlobal.length.toLocaleString()} propiedades`;
+            const n = inventarioGlobal.length.toLocaleString();
+            document.getElementById('map-total-results').innerText = `Mostrando ${n} propiedades`;
+            document.getElementById('badge-map').innerText = n;
+            document.getElementById('kpi-inventory').innerText = n + ' props';
             renderMassiveMap(inventarioGlobal);
         }
     });
@@ -63,24 +66,34 @@ document.addEventListener('DOMContentLoaded', () => {
         header: true,
         skipEmptyLines: true,
         complete: function(results) {
-            let parsed = results.data.filter(r => r.Asesor && r['Fecha Match']);
+            let parsed = results.data.filter(r => r['\uD83D\uDC64 COMPRADOR (Lead/Asesor)'] || r.Asesor || r['Fecha Match']);
             
             parsed.forEach(r => {
                 let s = parseInt(r.Score || 0);
                 r._scoreNum = isNaN(s) ? 0 : s;
-                let c = r.Precio ? r.Precio.replace(/\D/g, '') : '';
+                // Soporte para el campo de precio en el nuevo formato
+                let precioRaw = r.Precio || r['Precio'] || '';
+                let c = precioRaw ? String(precioRaw).replace(/\D/g, '') : '';
                 r._precioNum = c ? parseInt(c) : 0;
                 r._comisionPotencial = Math.round(r._precioNum * 0.03);
+                // Barrio del nuevo y viejo formato
                 r._barrioLower = (r.Barrio || '').toLowerCase();
+                // Asesor del nuevo y viejo formato
+                r._asesor = r['\uD83D\uDC64 COMPRADOR (Lead/Asesor)'] || r.Asesor || '';
+                // Empresa
+                r._empresa = r['Empresa (Lead)'] || r.Empresa || '';
+                // Zonas
+                r._zonas = r['Zonas Buscadas'] || r.Zona || '';
+                // Estado normalizado con nueva columna 'Visita'
                 r._estadoNorm = 'Pendiente';
-                if(r.Score > 80) r._estadoNorm = 'Contactado';
-                if(r.Score > 95) r._estadoNorm = 'Cerrado';
+                if(r.Score >= 80) r._estadoNorm = 'Contactado';
+                if(r.Score >= 90) r._estadoNorm = 'Visita';
+                if(r.Score >= 95) r._estadoNorm = 'Cerrado';
                 if(r.Score < 60) r._estadoNorm = 'Descartado';
             });
 
             globalData = parsed;
             document.getElementById('select-asesor').addEventListener('change', aplicarFiltro);
-            document.getElementById('filter-barrio-base').addEventListener('change', aplicarFiltro);
             aplicarFiltro();
         }
     });
@@ -126,7 +139,7 @@ function aplicarFiltro() {
     const asesorFiltro = document.getElementById('select-asesor').value;
     let filtered = globalData;
     if (asesorFiltro !== "Todos") {
-        filtered = filtered.filter(r => (r.Asesor || '').includes(asesorFiltro));
+        filtered = filtered.filter(r => (r._asesor || r.Asesor || '').includes(asesorFiltro));
     }
     renderKanban(filtered);
     renderAnalytics(filtered);
@@ -134,40 +147,60 @@ function aplicarFiltro() {
 
 function renderKanban(data) {
     const cols = {
-        'Pendiente': document.getElementById('col-pendientes'),
+        'Pendiente':  document.getElementById('col-pendientes'),
         'Contactado': document.getElementById('col-contactados'),
-        'Cerrado': document.getElementById('col-cerrados'),
+        'Visita':     document.getElementById('col-visita'),
+        'Cerrado':    document.getElementById('col-cerrados'),
         'Descartado': document.getElementById('col-descartados')
     };
     
-    for(let k in cols) cols[k].innerHTML = '';
+    for(let k in cols) if(cols[k]) cols[k].innerHTML = '';
 
     let pipelineActive = 0;
     let revenueGen = 0;
-    let counts = { 'Pendiente': 0, 'Contactado': 0, 'Cerrado': 0, 'Descartado': 0 };
+    let counts = { 'Pendiente': 0, 'Contactado': 0, 'Visita': 0, 'Cerrado': 0, 'Descartado': 0 };
+
+    const scoreColors = {
+        'Pendiente':  { bg: '#ede9fe', color: '#5b21b6' },
+        'Contactado': { bg: '#fef3c7', color: '#92400e' },
+        'Visita':     { bg: '#cffafe', color: '#155e75' },
+        'Cerrado':    { bg: '#d1fae5', color: '#065f46' },
+        'Descartado': { bg: '#f4f4f5', color: '#71717a' }
+    };
 
     data.forEach(m => {
         let st = m._estadoNorm;
+        if(!counts.hasOwnProperty(st)) st = 'Pendiente';
         counts[st]++;
-        if(st === 'Pendiente' || st === 'Contactado') pipelineActive += m._comisionPotencial;
+        if(st === 'Pendiente' || st === 'Contactado' || st === 'Visita') pipelineActive += m._comisionPotencial;
         if(st === 'Cerrado') revenueGen += m._comisionPotencial;
 
+        const sc = scoreColors[st] || scoreColors['Pendiente'];
         const card = document.createElement('div');
-        card.className = "kanban-card bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow";
+        card.className = 'kanban-card';
         card.innerHTML = `
-            <div class="font-extrabold text-sm text-gray-900 mb-2">Lead ${m.ID}</div>
-            <div class="text-[11px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-full font-bold mb-2">USD ${m._comisionPotencial.toLocaleString()}</div>
-            <div class="text-xs text-gray-500 capitalize">${m._barrioLower}</div>
+            <div class="card-score" style="background:${sc.bg};color:${sc.color}">Score ${m._scoreNum}</div>
+            <div class="card-title">${m._asesor || 'Lead ' + (m.ID || '')}</div>
+            <div class="card-sub">${m._empresa ? '🏢 ' + m._empresa + ' &nbsp;·&nbsp; ' : ''}📍 ${m._barrioLower || m._zonas || '–'}</div>
+            <div class="card-meta">
+                <span class="card-tag">${m['\uD83C\uDFE2 VENDEDOR (Fuente/Agencia)'] || m.Fuente || 'ML'}</span>
+                <span class="card-price">USD ${m._precioNum > 0 ? m._precioNum.toLocaleString('es-AR') : '–'}</span>
+            </div>
+            <button class="btn-assign" onclick="asignarme(this.closest('.kanban-card'))">✋ Asignarme</button>
         `;
-        cols[st].appendChild(card);
+        // Guardar datos del match en el elemento para el tooltip
+        card._matchData = m;
+        if(cols[st]) cols[st].appendChild(card);
     });
 
-    document.getElementById('count-pendientes').innerText = counts['Pendiente'];
+    document.getElementById('count-pendientes').innerText  = counts['Pendiente'];
     document.getElementById('count-contactados').innerText = counts['Contactado'];
-    document.getElementById('count-cerrados').innerText = counts['Cerrado'];
+    document.getElementById('count-visita').innerText      = counts['Visita'];
+    document.getElementById('count-cerrados').innerText    = counts['Cerrado'];
     document.getElementById('count-descartados').innerText = counts['Descartado'];
-    document.getElementById('kpi-pipeline').innerText = 'USD ' + pipelineActive.toLocaleString('es-AR');
-    document.getElementById('kpi-revenue').innerText = 'USD ' + revenueGen.toLocaleString('es-AR');
+    document.getElementById('badge-kanban').innerText = data.length;
+    document.getElementById('kpi-pipeline').innerText  = 'USD ' + pipelineActive.toLocaleString('es-AR');
+    document.getElementById('kpi-revenue').innerText   = 'USD ' + revenueGen.toLocaleString('es-AR');
 }
 
 function renderMap(data) {
@@ -423,36 +456,38 @@ function renderAnalytics(data) {
     
     let sorted = Object.keys(stats).map(k => ({name: k, ...stats[k]})).sort((a,b) => b.revenue - a.revenue);
     
+    // Update analytics stats
+    const total = data.length;
+    const cerrados = data.filter(m => m._estadoNorm === 'Cerrado').length;
+    const avgScore = total > 0 ? Math.round(data.reduce((acc, m) => acc + m._scoreNum, 0) / total) : 0;
+    if(document.getElementById('stat-total-matches')) document.getElementById('stat-total-matches').innerText = total.toLocaleString();
+    if(document.getElementById('stat-leads')) document.getElementById('stat-leads').innerText = new Set(data.map(m => m._asesor)).size;
+    if(document.getElementById('stat-efectividad')) document.getElementById('stat-efectividad').innerText = (total > 0 ? Math.round((cerrados/total)*100) : 0) + '%';
+    if(document.getElementById('stat-score')) document.getElementById('stat-score').innerText = avgScore;
+
     sorted.forEach((s, idx) => {
-        let isFirst = idx === 0;
-        let rankColor = isFirst ? 'text-warning' : 'text-gray-400';
-        let bgClass = isFirst ? 'bg-gradient-to-br from-white to-orange-50 border-orange-200' : 'bg-white border-gray-200';
-        
-        lbContainer.innerHTML += `
-            <div class="${bgClass} border rounded-xl shadow-sm p-6 flex flex-col justify-between transform transition hover:-translate-y-1 hover:shadow-md">
-                <div class="flex justify-between items-start mb-6">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center font-extrabold text-gray-800 text-lg shadow-inner">${s.name.charAt(0)}</div>
-                        <span class="font-extrabold text-gray-900 text-lg">${s.name}</span>
-                    </div>
-                    <span class="font-black text-2xl ${rankColor}">#${idx+1}</span>
-                </div>
-                <div class="space-y-3">
-                    <div class="flex justify-between text-sm items-center">
-                        <span class="text-gray-500 font-semibold uppercase tracking-wider text-[10px]">Revenue</span>
-                        <span class="text-success font-black text-lg">$${s.revenue.toLocaleString()}</span>
-                    </div>
-                    <div class="flex justify-between text-sm items-center">
-                        <span class="text-gray-500 font-semibold uppercase tracking-wider text-[10px]">Pipeline</span>
-                        <span class="text-gray-700 font-bold">$${s.pipeline.toLocaleString()}</span>
-                    </div>
-                    <div class="flex justify-between text-sm items-center">
-                        <span class="text-gray-500 font-semibold uppercase tracking-wider text-[10px]">Efectividad</span>
-                        <span class="text-primary font-black bg-primary/10 px-2 py-0.5 rounded-full text-xs">${s.total > 0 ? Math.round((s.wins/s.total)*100) : 0}%</span>
-                    </div>
-                </div>
+        const isFirst = idx === 0;
+        const medals = ['🥇','🥈','🥉',''];
+        const card = document.createElement('div');
+        card.className = 'leader-card' + (isFirst ? ' top' : '');
+        card.innerHTML = `
+            <div class="leader-avatar">${s.name.charAt(0)}</div>
+            <div class="leader-name">${medals[idx] || ''} ${s.name}</div>
+            <div class="leader-rank">#${idx+1} en el ranking</div>
+            <div class="leader-stat">
+                <span class="leader-stat-label">Revenue</span>
+                <span class="leader-stat-value" style="color:var(--success)">$${s.revenue.toLocaleString()}</span>
+            </div>
+            <div class="leader-stat">
+                <span class="leader-stat-label">Pipeline</span>
+                <span class="leader-stat-value">$${s.pipeline.toLocaleString()}</span>
+            </div>
+            <div class="leader-stat">
+                <span class="leader-stat-label">Efectividad</span>
+                <span class="pill pill-purple">${s.total > 0 ? Math.round((s.wins/s.total)*100) : 0}%</span>
             </div>
         `;
+        lbContainer.appendChild(card);
     });
 
     let fb = 0, ml = 0, zp = 0;
@@ -480,3 +515,455 @@ function renderAnalytics(data) {
         options: { responsive: true, maintainAspectRatio: false, scales: { y: { display: false }, x: { grid: { display: false }, ticks: { color: '#6b7280', font: {family: 'Inter', weight: 'bold'} } } }, plugins: { legend: { display: false } } }
     });
 }
+
+/* ──────────────────────────────────────────────────────────────
+   🔍  BÚSQUEDA EN TIEMPO REAL EN EL KANBAN
+────────────────────────────────────────────────────────────── */
+function filtrarKanbanPorTexto(query) {
+    const q = query.trim().toLowerCase();
+    const cards = document.querySelectorAll('.kanban-cards .kanban-card:not(.skeleton)');
+    let visible = 0;
+
+    cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        if (!q || text.includes(q)) {
+            card.style.display = '';
+            card.style.opacity = '1';
+            visible++;
+        } else {
+            card.style.display = 'none';
+        }
+    });
+
+    const countEl = document.getElementById('search-count');
+    const countNum = document.getElementById('search-count-num');
+    if (q) {
+        countEl.style.display = 'block';
+        countNum.textContent = visible;
+    } else {
+        countEl.style.display = 'none';
+    }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   💬  TOOLTIP AL PASAR EL MOUSE SOBRE UNA TARJETA
+────────────────────────────────────────────────────────────── */
+(function initCardTooltip() {
+    const tooltip = document.getElementById('card-tooltip');
+    if (!tooltip) return;
+
+    document.addEventListener('mouseover', e => {
+        const card = e.target.closest('.kanban-card:not(.skeleton)');
+        if (!card || e.target.closest('.btn-assign')) { tooltip.classList.remove('visible'); return; }
+
+        const data = card._matchData;
+        if (!data) return;
+
+        const precio = data._precioNum > 0 ? 'USD ' + data._precioNum.toLocaleString('es-AR') : '–';
+        const comision = data._comisionPotencial > 0 ? 'USD ' + data._comisionPotencial.toLocaleString('es-AR') : '–';
+        const zonas = data._zonas || data._barrioLower || '–';
+        const asesor = data._asesor || '–';
+        const fuente = data['🏢 VENDEDOR (Fuente/Agencia)'] || data.Fuente || '–';
+        const fecha = data['Fecha Match'] || '–';
+        const score = data._scoreNum || '–';
+
+        tooltip.innerHTML = `
+            <div class="card-tooltip-title">${asesor}</div>
+            <div class="card-tooltip-row"><span>🏷️ Score</span><span>${score} pts</span></div>
+            <div class="card-tooltip-row"><span>📍 Zona buscada</span><span>${zonas.substring(0,30)}</span></div>
+            <div class="card-tooltip-row"><span>💰 Precio</span><span>${precio}</span></div>
+            <hr class="card-tooltip-divider">
+            <div class="card-tooltip-row"><span>🏢 Fuente</span><span>${fuente.substring(0,22)}</span></div>
+            <div class="card-tooltip-row"><span>📅 Fecha match</span><span>${fecha}</span></div>
+            <div class="card-tooltip-row"><span>💵 Comisión est.</span><span>${comision}</span></div>
+            <hr class="card-tooltip-divider">
+            <div class="card-tooltip-note">💡 Click en "Asignarme" para tomar este lead</div>
+        `;
+
+        // Posicionar
+        const rect = card.getBoundingClientRect();
+        let top = rect.top + window.scrollY;
+        let left = rect.right + 10;
+        // Si se sale de la pantalla por la derecha, mostrar a la izquierda
+        if (left + 270 > window.innerWidth) left = rect.left - 270;
+        tooltip.style.top = Math.max(8, top) + 'px';
+        tooltip.style.left = left + 'px';
+        tooltip.classList.add('visible');
+    });
+
+    document.addEventListener('mouseout', e => {
+        const card = e.target.closest('.kanban-card:not(.skeleton)');
+        if (card && !card.contains(e.relatedTarget)) tooltip.classList.remove('visible');
+        if (!e.target.closest('.kanban-card')) tooltip.classList.remove('visible');
+    });
+})();
+
+/* ──────────────────────────────────────────────────────────────
+   ✋  BOTÓN "ASIGNARME" EN CADA TARJETA
+────────────────────────────────────────────────────────────── */
+function asignarme(card) {
+    const asesorActual = document.getElementById('select-asesor').value;
+    if (asesorActual === 'Todos') {
+        showToast('⚠️ Seleccioná primero tu nombre en el selector del sidebar');
+        return;
+    }
+    const data = card._matchData;
+    const nombre = data ? (data._asesor || 'Lead') : 'Lead';
+    card.style.outline = '2px solid var(--brand)';
+    card.querySelector('.btn-assign').textContent = '✓ Asignado';
+    card.querySelector('.btn-assign').style.background = 'var(--success)';
+    showToast(`✅ ${asesorActual} tomó el lead de ${nombre}`);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   🔔  TOAST HELPER
+────────────────────────────────────────────────────────────── */
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   🖱️  DRAG & DROP EN EL KANBAN
+────────────────────────────────────────────────────────────── */
+(function initDragDrop() {
+    let dragCard = null;
+    let ghost = null;
+    let offsetX = 0, offsetY = 0;
+    let originalCol = null;
+
+    const colNames = {
+        'col-pendientes':  'Nuevos Contactos',
+        'col-contactados': 'En Gestión',
+        'col-visita':      'Visita Agendada',
+        'col-cerrados':    'Operación Ganada',
+        'col-descartados': 'Descartados'
+    };
+
+    // Inicializar drag en tarjetas nuevas (se llama desde renderKanban)
+    window.initDragOnCards = function() {
+        document.querySelectorAll('.kanban-card:not(.skeleton)').forEach(card => {
+            if (card._dragInited) return;
+            card._dragInited = true;
+            card.addEventListener('mousedown', onMouseDown);
+        });
+    };
+
+    function onMouseDown(e) {
+        // No iniciar drag si el click es en el botón de asignar
+        if (e.target.closest('.btn-assign')) return;
+        if (e.button !== 0) return;
+
+        dragCard = e.currentTarget;
+        originalCol = dragCard.closest('.kanban-cards');
+
+        const rect = dragCard.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+
+        // Crear ghost visual
+        ghost = document.createElement('div');
+        ghost.className = 'drag-ghost';
+        ghost.innerHTML = dragCard.innerHTML;
+        ghost.style.left = (e.clientX - offsetX) + 'px';
+        ghost.style.top  = (e.clientY - offsetY) + 'px';
+        document.body.appendChild(ghost);
+
+        // Marcar tarjeta original como "arrastrando"
+        setTimeout(() => dragCard.classList.add('dragging'), 0);
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup',   onMouseUp);
+        e.preventDefault();
+    }
+
+    function onMouseMove(e) {
+        if (!ghost) return;
+        ghost.style.left = (e.clientX - offsetX) + 'px';
+        ghost.style.top  = (e.clientY - offsetY) + 'px';
+
+        // Limpiar highlight anterior
+        document.querySelectorAll('.kanban-cards.drag-over').forEach(c => c.classList.remove('drag-over'));
+
+        // Detectar columna bajo el cursor (ignorando el ghost)
+        ghost.style.display = 'none';
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        ghost.style.display = '';
+
+        const targetCol = el ? el.closest('.kanban-cards') : null;
+        if (targetCol && targetCol !== originalCol) {
+            targetCol.classList.add('drag-over');
+        }
+    }
+
+    function onMouseUp(e) {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup',   onMouseUp);
+
+        if (ghost) { ghost.remove(); ghost = null; }
+        if (!dragCard) return;
+
+        dragCard.classList.remove('dragging');
+
+        // Detectar columna destino
+        ghost = null;
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const targetCol = el ? el.closest('.kanban-cards') : null;
+
+        document.querySelectorAll('.kanban-cards.drag-over').forEach(c => c.classList.remove('drag-over'));
+
+        if (targetCol && targetCol !== originalCol) {
+            // Mover tarjeta a la nueva columna
+            targetCol.appendChild(dragCard);
+
+            const colId = targetCol.id;
+            const newState = colNames[colId] || colId;
+            const leadName = dragCard._matchData ? (dragCard._matchData._asesor || 'Lead') : 'Lead';
+
+            // Actualizar contadores
+            actualizarContadores();
+
+            // Toast de confirmación
+            const emojis = {
+                'col-pendientes':  '🔵',
+                'col-contactados': '🟡',
+                'col-visita':      '🩵',
+                'col-cerrados':    '🟢',
+                'col-descartados': '⚪'
+            };
+            showToast(`${emojis[colId] || '📋'} "${leadName}" movido a ${newState}`);
+        }
+
+        dragCard = null;
+        originalCol = null;
+    }
+
+    // Actualizar badges/contadores sin re-renderizar todo
+    function actualizarContadores() {
+        const colMap = {
+            'col-pendientes':  'count-pendientes',
+            'col-contactados': 'count-contactados',
+            'col-visita':      'count-visita',
+            'col-cerrados':    'count-cerrados',
+            'col-descartados': 'count-descartados'
+        };
+        Object.entries(colMap).forEach(([colId, countId]) => {
+            const col = document.getElementById(colId);
+            const counter = document.getElementById(countId);
+            if (col && counter) {
+                const n = col.querySelectorAll('.kanban-card:not(.skeleton)').length;
+                counter.textContent = n;
+            }
+        });
+    }
+
+    // Hook: cada vez que se renderiza el kanban, inicializar drag en las nuevas tarjetas
+    const origRenderKanban = window.renderKanban;
+    if (origRenderKanban) {
+        window.renderKanban = function(data) {
+            origRenderKanban(data);
+            setTimeout(window.initDragOnCards, 50);
+        };
+    }
+
+    // También inicializar en tarjetas ya existentes
+    document.addEventListener('DOMContentLoaded', () => setTimeout(window.initDragOnCards, 500));
+    setTimeout(window.initDragOnCards, 1000);
+})();
+
+/* ──────────────────────────────────────────────────────────────
+   🏷️  FILTER CHIPS — Precio y Zona
+────────────────────────────────────────────────────────────── */
+let activeFilters = { precio: null, zona: null };
+
+function activarChip(btn, tipo) {
+    const group = btn.closest('.filter-chips');
+    const wasActive = btn.classList.contains('active');
+
+    // Desactivar todos en el grupo
+    group.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+
+    if (wasActive) {
+        // Toggle off
+        activeFilters[tipo] = null;
+    } else {
+        btn.classList.add('active');
+        if (tipo === 'precio') {
+            activeFilters.precio = { min: +btn.dataset.min, max: +btn.dataset.max };
+        } else {
+            activeFilters.zona = btn.dataset.zona;
+        }
+    }
+
+    aplicarFiltrosChips();
+}
+
+function aplicarFiltrosChips() {
+    const cards = document.querySelectorAll('.kanban-cards .kanban-card:not(.skeleton)');
+    let visible = 0;
+
+    cards.forEach(card => {
+        const data = card._matchData;
+        if (!data) { card.style.display = ''; return; }
+
+        let mostrar = true;
+
+        // Filtro de precio
+        if (activeFilters.precio) {
+            const p = data._precioNum || 0;
+            if (p < activeFilters.precio.min || p > activeFilters.precio.max) mostrar = false;
+        }
+
+        // Filtro de zona
+        if (activeFilters.zona && mostrar) {
+            const texto = ((data._barrioLower || '') + ' ' + (data._zonas || '')).toLowerCase();
+            if (!texto.includes(activeFilters.zona)) mostrar = false;
+        }
+
+        card.style.display = mostrar ? '' : 'none';
+        if (mostrar) visible++;
+    });
+
+    // Actualizar contador de búsqueda
+    const hasFilter = activeFilters.precio || activeFilters.zona;
+    const countEl = document.getElementById('search-count');
+    const countNum = document.getElementById('search-count-num');
+    if (hasFilter && countEl) {
+        countEl.style.display = 'block';
+        countNum.textContent = visible;
+    } else if (!document.getElementById('kanban-search')?.value) {
+        if (countEl) countEl.style.display = 'none';
+    }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   📋  DRAWER DE DETALLE — Abrir / Cerrar / Contenido
+────────────────────────────────────────────────────────────── */
+let drawerCurrentCard = null;
+
+function abrirDrawer(card) {
+    const data = card._matchData;
+    if (!data) return;
+    drawerCurrentCard = card;
+
+    const drawer = document.getElementById('lead-drawer');
+    const overlay = document.getElementById('drawer-overlay');
+    const body = document.getElementById('drawer-body');
+    const title = document.getElementById('drawer-title');
+
+    const nombre = data._asesor || 'Lead sin nombre';
+    const score = data._scoreNum || 0;
+    const precio = data._precioNum > 0 ? 'USD ' + data._precioNum.toLocaleString('es-AR') : 'A consultar';
+    const comision = data._comisionPotencial > 0 ? 'USD ' + data._comisionPotencial.toLocaleString('es-AR') : '–';
+    const barrio = (data._barrioLower || data._zonas || '–').replace(/,/g, ' · ');
+    const empresa = data._empresa || '–';
+    const fuente = data['🏢 VENDEDOR (Fuente/Agencia)'] || data.Fuente || '–';
+    const fecha = data['Fecha Match'] || data['Fecha'] || '–';
+    const zonas = data._zonas || data['Zonas Buscadas'] || '–';
+    const tipo = data.tipo_propiedad || data['Tipo'] || '–';
+    const operacion = data.operacion || data['Operacion'] || '–';
+
+    // Score color
+    const scoreColor = score >= 90 ? '#10b981' : score >= 75 ? '#f59e0b' : '#7c3aed';
+    const scoreBg = score >= 90 ? '#d1fae5' : score >= 75 ? '#fef3c7' : '#ede9fe';
+
+    title.textContent = nombre;
+
+    body.innerHTML = `
+        <!-- Score badge -->
+        <div class="drawer-section">
+            <div class="drawer-score-badge" style="background:${scoreBg};color:${scoreColor}">
+                ⭐ Score de compatibilidad: <strong>${score} pts</strong>
+            </div>
+        </div>
+
+        <!-- Precio -->
+        <div class="drawer-section">
+            <div class="drawer-section-title">💰 Precio y Comisión Estimada</div>
+            <div class="drawer-price">${precio}</div>
+            <div class="drawer-commission">✅ Comisión estimada (3%): ${comision}</div>
+        </div>
+
+        <!-- Comprador (Lead) -->
+        <div class="drawer-section">
+            <div class="drawer-section-title">👤 Comprador / Lead</div>
+            <div class="drawer-row">
+                <span class="drawer-row-label">Nombre / Asesor</span>
+                <span class="drawer-row-value">${nombre}</span>
+            </div>
+            <div class="drawer-row">
+                <span class="drawer-row-label">Empresa</span>
+                <span class="drawer-row-value">${empresa}</span>
+            </div>
+            <div class="drawer-row">
+                <span class="drawer-row-label">Zonas buscadas</span>
+                <span class="drawer-row-value">${zonas}</span>
+            </div>
+        </div>
+
+        <!-- Propiedad -->
+        <div class="drawer-section">
+            <div class="drawer-section-title">🏠 Propiedad</div>
+            <div class="drawer-row">
+                <span class="drawer-row-label">Barrio</span>
+                <span class="drawer-row-value">${barrio}</span>
+            </div>
+            <div class="drawer-row">
+                <span class="drawer-row-label">Tipo</span>
+                <span class="drawer-row-value">${tipo}</span>
+            </div>
+            <div class="drawer-row">
+                <span class="drawer-row-label">Operación</span>
+                <span class="drawer-row-value">${operacion}</span>
+            </div>
+            <div class="drawer-row">
+                <span class="drawer-row-label">Fuente</span>
+                <span class="drawer-row-value"><span class="drawer-tag">${fuente}</span></span>
+            </div>
+        </div>
+
+        <!-- Historial -->
+        <div class="drawer-section">
+            <div class="drawer-section-title">📅 Historial</div>
+            <div class="drawer-row">
+                <span class="drawer-row-label">Fecha del match</span>
+                <span class="drawer-row-value">${fecha}</span>
+            </div>
+            <div class="drawer-row">
+                <span class="drawer-row-label">Estado actual</span>
+                <span class="drawer-row-value"><span class="drawer-tag">${data._estadoNorm || 'Pendiente'}</span></span>
+            </div>
+        </div>
+    `;
+
+    drawer.classList.add('open');
+    overlay.classList.add('open');
+}
+
+function cerrarDrawer() {
+    document.getElementById('lead-drawer').classList.remove('open');
+    document.getElementById('drawer-overlay').classList.remove('open');
+    drawerCurrentCard = null;
+}
+
+function asignarDesdeDrawer() {
+    if (!drawerCurrentCard) return;
+    asignarme(drawerCurrentCard);
+    cerrarDrawer();
+}
+
+// Cerrar con Escape
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') cerrarDrawer();
+});
+
+// Abrir drawer al hacer click en una tarjeta (sin drag)
+document.addEventListener('click', e => {
+    const card = e.target.closest('.kanban-card:not(.skeleton)');
+    if (!card) return;
+    if (e.target.closest('.btn-assign')) return; // no abrir si clickeó asignarme
+    if (card._dragged) return;                    // no abrir si fue un drag
+    abrirDrawer(card);
+});
