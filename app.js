@@ -214,25 +214,75 @@ function suscribirRealtime() {
 
 function manejarCambioRealtime(payload) {
     const { eventType, new: newRow, old: oldRow } = payload;
+    const asesorActual = document.getElementById('select-asesor')?.value || 'Todos';
 
     if (eventType === 'UPDATE') {
-        // Actualizar solo el registro cambiado en globalData
         const idx = globalData.findIndex(r => r.id === newRow.id);
         if (idx !== -1) {
             const updated = normalizarDatos([newRow])[0];
             globalData[idx] = updated;
         }
         aplicarFiltro();
-        // Mostrar notificación del cambio
-        const asesorActual = document.getElementById('select-asesor').value;
-        if (newRow.asesor_asignado && newRow.asesor_asignado !== asesorActual) {
-            showToast(`🔄 ${newRow.asesor_asignado} actualizó un lead`);
+        
+        // Feed Activity
+        let msgs = [];
+        const who = newRow.asesor_asignado || 'Alguien';
+        if (who !== asesorActual && asesorActual !== 'Todos') {
+            showToast(`🔄 ${who} actualizó un lead`);
         }
+        
+        if (oldRow && oldRow.estado_kanban !== newRow.estado_kanban) {
+            msgs.push(`movió un lead a <b>${newRow.estado_kanban || 'Pendiente'}</b>`);
+        }
+        if (oldRow && oldRow.asesor_asignado !== newRow.asesor_asignado && newRow.asesor_asignado) {
+            msgs.push(`se asignó un nuevo lead`);
+        }
+        
+        if (msgs.length > 0) {
+            addFeedActivity(msgs.join(' y '), who);
+        }
+
     } else if (eventType === 'INSERT') {
         const nuevo = normalizarDatos([newRow])[0];
         globalData.unshift(nuevo);
         aplicarFiltro();
         showToast(`🔔 Nuevo lead agregado`);
+        addFeedActivity(`ingresó un nuevo lead desde ${nuevo.Fuente || 'web'}`, 'Sistema');
+    }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   📢  FEED DE ACTIVIDAD (SIDEBAR)
+─────────────────────────────────────────────────────────────── */
+function addFeedActivity(actionText, user) {
+    const feed = document.getElementById('sidebar-feed');
+    if (!feed) return;
+    
+    // Remover el mensaje vacío si es el primero
+    const emptyMsg = feed.querySelector('.feed-empty');
+    if (emptyMsg) emptyMsg.remove();
+    
+    const now = new Date();
+    const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+    
+    const el = document.createElement('div');
+    el.className = 'feed-item';
+    el.innerHTML = `
+        <b>${user}</b> ${actionText}
+        <span class="time">Hoy a las ${timeStr}</span>
+    `;
+    
+    // Insertar después del header
+    const header = feed.querySelector('.feed-header');
+    if (header && header.nextSibling) {
+        feed.insertBefore(el, header.nextSibling);
+    } else {
+        feed.appendChild(el);
+    }
+    
+    // Mantener máximo 20 items (header cuenta como 1)
+    while (feed.children.length > 21) {
+        feed.lastElementChild.remove();
     }
 }
 

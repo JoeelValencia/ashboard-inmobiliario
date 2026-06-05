@@ -214,6 +214,36 @@
             border-radius: 99px;
         }
 
+        /* ─── SIDEBAR FEED (Actividad en Vivo) ───────────────── */
+        .sidebar-feed {
+            border-top: 1px solid #27272a;
+            padding: 12px;
+            max-height: 180px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .feed-header {
+            font-size: 9px;
+            font-weight: 700;
+            color: #52525b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .feed-pulse { width: 6px; height: 6px; background: var(--success); border-radius: 50%; box-shadow: 0 0 6px var(--success); animation: pulse 2s infinite; }
+        .feed-item {
+            font-size: 10px; color: #a1a1aa; line-height: 1.4;
+            background: #27272a; border-radius: 6px; padding: 6px 8px;
+            border-left: 2px solid var(--brand);
+            animation: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .feed-item b { color: white; }
+        .feed-item .time { font-size: 8px; color: #52525b; display: block; margin-top: 2px; }
+        @keyframes slideInLeft { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+
         /* Asesor Picker */
         .asesor-panel {
             padding: 12px;
@@ -1201,6 +1231,14 @@
                 Leaderboard
             </button>
         </nav>
+
+        <div class="sidebar-feed" id="sidebar-feed">
+            <div class="feed-header">
+                <span>Actividad en Vivo</span>
+                <div class="feed-pulse"></div>
+            </div>
+            <div class="feed-empty" style="font-size:10px; color:#52525b; text-align:center; margin-top:10px;">Esperando actividad...</div>
+        </div>
 
         <div class="asesor-panel">
             <label>Trabajando como</label>
