@@ -2,6 +2,13 @@
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRCE8uHbyUCrZKdBOqGRf5OKx2TqMX-z0VJRZ1YQoS4-5szkZ31fJbc6diA2ydxhQdVBn2h0G1hT1hn/pub?gid=2040705075&single=true&output=csv';
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxlE_a4It3IueNJuWDACwCVdh-AgNMIgH6RsmVdsQ5e2rNhf4MUdPzYtiRz_FECnrRw/exec';
 
+// ─── SUPABASE CONFIG ──────────────────────────────────────────
+// URL e clave anon pública (safe para el browser)
+const SUPABASE_URL = 'https://dncfzfqxnpkygabrcczz.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_Ij86JHGSoPgiEdlbp4baZA_wrXjl0vI';
+let supabase = null;
+let realtimeChannel = null;
+
 // Variables Globales
 let map;
 let markersLayer;
@@ -60,44 +67,183 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Fetch y Parse del CSV de Matches
+    // ─── INICIALIZAR SUPABASE ─────────────────────────────────────────
+    try {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        cargarDesdeSupabase();
+        suscribirRealtime();
+    } catch(e) {
+        console.warn('Supabase no disponible, usando CSV:', e);
+        cargarDesdeCSV();
+    }
+});
+
+/* ───────────────────────────────────────────────────────────────
+   📊  CARGAR DESDE SUPABASE
+─────────────────────────────────────────────────────────────── */
+async function cargarDesdeSupabase() {
+    mostrarIndicadorSync('Conectando a Supabase...', 'loading');
+    try {
+        const { data, error } = await supabase
+            .from('matches')
+            .select('*')
+            .order('score', { ascending: false });
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            // Si la tabla está vacía, cargar desde CSV como fallback
+            console.warn('Tabla matches vacía, usando CSV...');
+            mostrarIndicadorSync('Sin datos en Supabase, usando Google Sheet', 'warning');
+            cargarDesdeCSV();
+            return;
+        }
+
+        const parsed = normalizarDatos(data);
+        globalData = parsed;
+        document.getElementById('select-asesor').addEventListener('change', aplicarFiltro);
+        aplicarFiltro();
+        mostrarIndicadorSync('Conectado en tiempo real ⚡', 'ok');
+    } catch(e) {
+        console.error('Error Supabase:', e);
+        mostrarIndicadorSync('Error Supabase — usando CSV', 'error');
+        cargarDesdeCSV();
+    }
+}
+
+/* Fallback: cargar desde Google Sheet CSV */
+function cargarDesdeCSV() {
     Papa.parse(CSV_URL, {
         download: true,
         header: true,
         skipEmptyLines: true,
         complete: function(results) {
             let parsed = results.data.filter(r => r['\uD83D\uDC64 COMPRADOR (Lead/Asesor)'] || r.Asesor || r['Fecha Match']);
-            
-            parsed.forEach(r => {
-                let s = parseInt(r.Score || 0);
-                r._scoreNum = isNaN(s) ? 0 : s;
-                // Soporte para el campo de precio en el nuevo formato
-                let precioRaw = r.Precio || r['Precio'] || '';
-                let c = precioRaw ? String(precioRaw).replace(/\D/g, '') : '';
-                r._precioNum = c ? parseInt(c) : 0;
-                r._comisionPotencial = Math.round(r._precioNum * 0.03);
-                // Barrio del nuevo y viejo formato
-                r._barrioLower = (r.Barrio || '').toLowerCase();
-                // Asesor del nuevo y viejo formato
-                r._asesor = r['\uD83D\uDC64 COMPRADOR (Lead/Asesor)'] || r.Asesor || '';
-                // Empresa
-                r._empresa = r['Empresa (Lead)'] || r.Empresa || '';
-                // Zonas
-                r._zonas = r['Zonas Buscadas'] || r.Zona || '';
-                // Estado normalizado con nueva columna 'Visita'
-                r._estadoNorm = 'Pendiente';
-                if(r.Score >= 80) r._estadoNorm = 'Contactado';
-                if(r.Score >= 90) r._estadoNorm = 'Visita';
-                if(r.Score >= 95) r._estadoNorm = 'Cerrado';
-                if(r.Score < 60) r._estadoNorm = 'Descartado';
-            });
-
+            parsed = normalizarDatos(parsed);
             globalData = parsed;
             document.getElementById('select-asesor').addEventListener('change', aplicarFiltro);
             aplicarFiltro();
+            mostrarIndicadorSync('Google Sheet (sin tiempo real)', 'warning');
         }
     });
-});
+}
+
+/* Normalizar datos: tanto de Supabase como de CSV */
+function normalizarDatos(rows) {
+    return rows.map(r => {
+        let s = parseInt(r.score || r.Score || 0);
+        r._scoreNum = isNaN(s) ? 0 : s;
+        let precioRaw = r.precio || r.Precio || '';
+        let c = precioRaw ? String(precioRaw).replace(/\D/g, '') : '';
+        r._precioNum = c ? parseInt(c) : 0;
+        r._comisionPotencial = Math.round(r._precioNum * 0.03);
+        r._barrioLower = (r.barrio || r.Barrio || '').toLowerCase();
+        r._asesor = r.asesor || r['\uD83D\uDC64 COMPRADOR (Lead/Asesor)'] || r.Asesor || '';
+        r._empresa = r.empresa || r['Empresa (Lead)'] || r.Empresa || '';
+        r._zonas = r.zonas_buscadas || r['Zonas Buscadas'] || r.Zona || '';
+        // Estado: si ya tiene uno guardado en DB, usarlo; si no, calcular por score
+        if (r.estado_kanban) {
+            r._estadoNorm = r.estado_kanban;
+        } else {
+            r._estadoNorm = 'Pendiente';
+            if(r._scoreNum >= 80) r._estadoNorm = 'Contactado';
+            if(r._scoreNum >= 90) r._estadoNorm = 'Visita';
+            if(r._scoreNum >= 95) r._estadoNorm = 'Cerrado';
+            if(r._scoreNum < 60)  r._estadoNorm = 'Descartado';
+        }
+        r._asesorAsignado = r.asesor_asignado || null;
+        return r;
+    });
+}
+
+/* ───────────────────────────────────────────────────────────────
+   ⚡  SUSCRIPCIÓN REALTIME
+─────────────────────────────────────────────────────────────── */
+function suscribirRealtime() {
+    if (!supabase) return;
+
+    realtimeChannel = supabase
+        .channel('kanban-realtime')
+        .on('postgres_changes', {
+            event: '*',        // INSERT, UPDATE, DELETE
+            schema: 'public',
+            table: 'matches'
+        }, payload => {
+            console.log('Cambio Realtime:', payload);
+            manejarCambioRealtime(payload);
+        })
+        .subscribe(status => {
+            if (status === 'SUBSCRIBED') {
+                mostrarIndicadorSync('Tiempo real activo ⚡', 'ok');
+            }
+        });
+}
+
+function manejarCambioRealtime(payload) {
+    const { eventType, new: newRow, old: oldRow } = payload;
+
+    if (eventType === 'UPDATE') {
+        // Actualizar solo el registro cambiado en globalData
+        const idx = globalData.findIndex(r => r.id === newRow.id);
+        if (idx !== -1) {
+            const updated = normalizarDatos([newRow])[0];
+            globalData[idx] = updated;
+        }
+        aplicarFiltro();
+        // Mostrar notificación del cambio
+        const asesorActual = document.getElementById('select-asesor').value;
+        if (newRow.asesor_asignado && newRow.asesor_asignado !== asesorActual) {
+            showToast(`🔄 ${newRow.asesor_asignado} actualizó un lead`);
+        }
+    } else if (eventType === 'INSERT') {
+        const nuevo = normalizarDatos([newRow])[0];
+        globalData.unshift(nuevo);
+        aplicarFiltro();
+        showToast(`🔔 Nuevo lead agregado`);
+    }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   📡  GUARDAR ESTADO EN SUPABASE
+─────────────────────────────────────────────────────────────── */
+async function guardarEstadoEnSupabase(matchId, nuevoEstado, asesorAsignado = null) {
+    if (!supabase || !matchId) return;
+
+    const update = { estado_kanban: nuevoEstado };
+    if (asesorAsignado) update.asesor_asignado = asesorAsignado;
+
+    const { error } = await supabase
+        .from('matches')
+        .update(update)
+        .eq('id', matchId);
+
+    if (error) {
+        console.error('Error guardando estado:', error);
+        showToast('⚠️ Error al guardar en Supabase');
+    }
+}
+
+/* Indicador de estado de sync en el topbar */
+function mostrarIndicadorSync(msg, tipo) {
+    let el = document.getElementById('sync-indicator');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'sync-indicator';
+        el.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;margin-left:8px;flex-shrink:0;';
+        const topbar = document.querySelector('.topbar');
+        if (topbar) topbar.appendChild(el);
+    }
+    const colors = {
+        ok:      { bg: '#d1fae5', color: '#065f46', dot: '#10b981' },
+        warning: { bg: '#fef3c7', color: '#92400e', dot: '#f59e0b' },
+        error:   { bg: '#fee2e2', color: '#991b1b', dot: '#ef4444' },
+        loading: { bg: '#ede9fe', color: '#5b21b6', dot: '#7c3aed' }
+    };
+    const c = colors[tipo] || colors.loading;
+    el.style.background = c.bg;
+    el.style.color = c.color;
+    el.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:${c.dot};${tipo==='loading'?'animation:pulse 1s infinite':''}"></span>${msg}`;
+}
 
 window.switchView = function(viewName) {
     document.querySelectorAll('.view-section').forEach(el => el.classList.add('hide'));
@@ -613,6 +759,11 @@ function asignarme(card) {
     card.querySelector('.btn-assign').textContent = '✓ Asignado';
     card.querySelector('.btn-assign').style.background = 'var(--success)';
     showToast(`✅ ${asesorActual} tomó el lead de ${nombre}`);
+
+    // ⚡ Guardar en Supabase
+    if (data && data.id) {
+        guardarEstadoEnSupabase(data.id, data._estadoNorm, asesorActual);
+    }
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -721,6 +872,21 @@ function showToast(msg) {
             const colId = targetCol.id;
             const newState = colNames[colId] || colId;
             const leadName = dragCard._matchData ? (dragCard._matchData._asesor || 'Lead') : 'Lead';
+
+            // ⚡ Mapear columna a estado y guardar en Supabase
+            const colToEstado = {
+                'col-pendientes':  'Pendiente',
+                'col-contactados': 'Contactado',
+                'col-visita':      'Visita',
+                'col-cerrados':    'Cerrado',
+                'col-descartados': 'Descartado'
+            };
+            const nuevoEstado = colToEstado[colId];
+            if (dragCard._matchData) {
+                dragCard._matchData._estadoNorm = nuevoEstado;
+                const matchId = dragCard._matchData.id;
+                if (matchId) guardarEstadoEnSupabase(matchId, nuevoEstado);
+            }
 
             // Actualizar contadores
             actualizarContadores();
