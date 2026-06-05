@@ -21,10 +21,27 @@
             --danger:      #ef4444;
             --bg:          #f5f5f7;
             --surface:     #ffffff;
+            --surface-glass: rgba(255, 255, 255, 0.75);
             --border:      #e4e4e7;
             --text:        #18181b;
             --muted:       #71717a;
+            --shadow:      0 4px 12px rgba(0,0,0,0.04);
+            --shadow-hover:0 8px 24px rgba(0,0,0,0.08);
             --sidebar-w:   240px;
+        }
+
+        body[data-theme="dark"] {
+            --brand:       #8b5cf6;
+            --brand-dark:  #a78bfa;
+            --brand-light: rgba(139, 92, 246, 0.15);
+            --bg:          #09090b;
+            --surface:     #18181b;
+            --surface-glass: rgba(24, 24, 27, 0.75);
+            --border:      #27272a;
+            --text:        #f4f4f5;
+            --muted:       #a1a1aa;
+            --shadow:      0 4px 12px rgba(0,0,0,0.4);
+            --shadow-hover:0 8px 24px rgba(0,0,0,0.6);
         }
 
         body {
@@ -174,7 +191,9 @@
         /* ─── TOP BAR ─────────────────────────────────────────── */
         .topbar {
             height: 58px;
-            background: var(--surface);
+            background: var(--surface-glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
@@ -448,6 +467,14 @@
         .leaflet-tooltip { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
         .leaflet-tooltip::before { display: none !important; }
         .leaflet-div-icon { background: transparent; border: none; }
+        
+        /* Dark Mode Map Filter */
+        body[data-theme="dark"] .leaflet-layer,
+        body[data-theme="dark"] .leaflet-control-zoom-in,
+        body[data-theme="dark"] .leaflet-control-zoom-out,
+        body[data-theme="dark"] .leaflet-control-attribution {
+            filter: invert(1) hue-rotate(180deg) brightness(95%) contrast(90%);
+        }
 
         .map-tooltip-card {
             background: white;
@@ -712,7 +739,7 @@
         }
         .btn-assign:hover { background: var(--brand-dark); }
         .kanban-card:hover .btn-assign { display: block; }
-        .kanban-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); transform: translateY(-1px); }
+        .kanban-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
 
         /* ─── DRAG & DROP ─────────────────────────────────────── */
         .kanban-card {
@@ -1117,6 +1144,17 @@
                 <option value="David">David</option>
                 <option value="Claudia">Claudia</option>
             </select>
+            <div style="margin-top: 16px; border-top: 1px solid #27272a; padding-top: 12px; display: flex; align-items: center; justify-content: space-between;">
+                <label style="margin:0; font-size:10px;">Dark Mode</label>
+                <button id="theme-toggle" onclick="toggleTheme()" style="background: none; border: none; color: #a1a1aa; cursor: pointer; padding: 4px;">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" id="theme-icon-moon">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                    </svg>
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" id="theme-icon-sun" style="display:none;">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                    </svg>
+                </button>
+            </div>
         </div>
     </aside>
 

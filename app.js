@@ -9,6 +9,36 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Ij86JHGSoPgiEdlbp4baZA_wrXjl0vI';
 let supabase = null;
 let realtimeChannel = null;
 
+// ─── THEME INIT (Se ejecuta apenas carga el script) ──────────
+const savedTheme = localStorage.getItem('nexus_theme');
+if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    document.body.setAttribute('data-theme', 'dark');
+} else {
+    document.body.removeAttribute('data-theme');
+}
+
+window.toggleTheme = function() {
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+        document.body.removeAttribute('data-theme');
+        localStorage.setItem('nexus_theme', 'light');
+    } else {
+        document.body.setAttribute('data-theme', 'dark');
+        localStorage.setItem('nexus_theme', 'dark');
+    }
+    updateThemeIcons();
+};
+
+function updateThemeIcons() {
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    const moon = document.getElementById('theme-icon-moon');
+    const sun = document.getElementById('theme-icon-sun');
+    if (moon && sun) {
+        if (isDark) { moon.style.display = 'none'; sun.style.display = 'block'; }
+        else { moon.style.display = 'block'; sun.style.display = 'none'; }
+    }
+}
+
 // Variables Globales
 let map;
 let markersLayer;
@@ -44,6 +74,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Evento de zoom y paneo para Supercluster
     map.on('moveend', updateSupercluster);
+    
+    // Iconos de tema inicial
+    updateThemeIcons();
 
     // Fetch GeoJSON de Barrios
     fetch('caba_barrios.geojson')
