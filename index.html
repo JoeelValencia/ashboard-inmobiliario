@@ -608,23 +608,25 @@
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 20px;
+            padding: 24px;
+            box-shadow: var(--shadow);
         }
 
         .stat-card-label {
             font-size: 11px;
-            font-weight: 700;
+            font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--muted);
-            margin-bottom: 8px;
+            margin-bottom: 12px;
         }
 
         .stat-card-value {
-            font-size: 26px;
-            font-weight: 800;
+            font-size: 28px;
+            font-weight: 600;
             color: var(--text);
             line-height: 1;
+            letter-spacing: -0.5px;
         }
 
         .stat-card-value.purple { color: var(--brand); }
@@ -648,12 +650,13 @@
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 20px;
+            padding: 24px;
+            box-shadow: var(--shadow);
         }
 
         .chart-card h4 {
             font-size: 12px;
-            font-weight: 700;
+            font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--muted);
@@ -672,38 +675,42 @@
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 18px;
-            transition: all 0.15s;
+            padding: 20px;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: var(--shadow);
         }
 
-        .leader-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.06); }
-        .leader-card.top { border-color: var(--warning); background: linear-gradient(135deg, #fff, #fffbeb); }
+        .leader-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+        .leader-card.top {
+            border-color: rgba(245, 158, 11, 0.4);
+            box-shadow: 0 4px 20px rgba(245, 158, 11, 0.1);
+        }
 
         .leader-avatar {
-            width: 40px; height: 40px;
-            border-radius: 10px;
-            background: linear-gradient(135deg, var(--brand), #a855f7);
-            color: white;
+            width: 44px; height: 44px;
+            border-radius: 12px;
+            background: var(--brand-light);
+            color: var(--brand-dark);
             font-size: 18px;
-            font-weight: 900;
+            font-weight: 800;
             display: flex; align-items: center; justify-content: center;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
         }
 
-        .leader-name { font-size: 14px; font-weight: 800; margin-bottom: 2px; }
+        .leader-name { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
         .leader-rank { font-size: 11px; color: var(--muted); margin-bottom: 14px; }
 
         .leader-stat { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-        .leader-stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--muted); }
-        .leader-stat-value { font-size: 13px; font-weight: 800; }
+        .leader-stat-label { font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--muted); }
+        .leader-stat-value { font-size: 13px; font-weight: 700; }
 
         .pill {
-            font-size: 10px; font-weight: 800;
-            padding: 2px 8px;
-            border-radius: 99px;
+            font-size: 10px; font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 6px;
         }
         .pill-purple { background: var(--brand-light); color: var(--brand-dark); }
-        .pill-green { background: #d1fae5; color: #065f46; }
+        .pill-green { background: rgba(16, 185, 129, 0.1); color: var(--success); }
 
         /* ─── TOAST ───────────────────────────────────────────── */
         #toast {

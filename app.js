@@ -731,8 +731,8 @@ function renderAnalytics(data) {
     if (chartFuentes) chartFuentes.destroy();
     chartFuentes = new Chart(document.getElementById('chart-fuentes').getContext('2d'), {
         type: 'doughnut',
-        data: { labels: ['ZonaProp', 'MercadoLibre', 'Facebook'], datasets: [{ data: [zp, ml, fb], backgroundColor: ['#6422b9', '#f59e0b', '#3b82f6'], borderColor: '#ffffff', borderWidth: 3 }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: '#4b5563', font: {family: 'Inter', weight: 'bold'} } } } }
+        data: { labels: ['ZonaProp', 'MercadoLibre', 'Facebook'], datasets: [{ data: [zp, ml, fb], backgroundColor: ['#6366f1', '#f59e0b', '#3b82f6'], borderColor: 'transparent', borderWidth: 3 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: '#6b7280', font: {family: 'Inter', weight: '600'} } } } }
     });
 
     if (chartEstados) chartEstados.destroy();
@@ -740,9 +740,9 @@ function renderAnalytics(data) {
         type: 'bar',
         data: { 
             labels: ['Nuevos', 'En Gestión', 'Ganados', 'Perdidos'], 
-            datasets: [{ label: 'Leads', data: [counts['Pendiente'], counts['Contactado'], counts['Cerrado'], counts['Descartado']], backgroundColor: ['#6422b9', '#f59e0b', '#10b981', '#9ca3af'], borderRadius: 6 }] 
+            datasets: [{ label: 'Leads', data: [counts['Pendiente'], counts['Contactado'], counts['Cerrado'], counts['Descartado']], backgroundColor: ['#6366f1', '#f59e0b', '#10b981', '#9ca3af'], borderRadius: 6 }] 
         },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { display: false }, x: { grid: { display: false }, ticks: { color: '#6b7280', font: {family: 'Inter', weight: 'bold'} } } }, plugins: { legend: { display: false } } }
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { display: false }, x: { grid: { display: false }, ticks: { color: '#6b7280', font: {family: 'Inter', weight: '600'} } } }, plugins: { legend: { display: false } } }
     });
 }
 
