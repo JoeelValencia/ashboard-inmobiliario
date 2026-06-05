@@ -288,6 +288,7 @@ function aplicarFiltro() {
         filtered = filtered.filter(r => (r._asesor || r.Asesor || '').includes(asesorFiltro));
     }
     renderKanban(filtered);
+    if (typeof renderTable === 'function') renderTable(filtered);
     renderAnalytics(filtered);
 }
 
@@ -666,29 +667,8 @@ function renderAnalytics(data) {
    🔍  BÚSQUEDA EN TIEMPO REAL EN EL KANBAN
 ────────────────────────────────────────────────────────────── */
 function filtrarKanbanPorTexto(query) {
-    const q = query.trim().toLowerCase();
-    const cards = document.querySelectorAll('.kanban-cards .kanban-card:not(.skeleton)');
-    let visible = 0;
-
-    cards.forEach(card => {
-        const text = card.textContent.toLowerCase();
-        if (!q || text.includes(q)) {
-            card.style.display = '';
-            card.style.opacity = '1';
-            visible++;
-        } else {
-            card.style.display = 'none';
-        }
-    });
-
-    const countEl = document.getElementById('search-count');
-    const countNum = document.getElementById('search-count-num');
-    if (q) {
-        countEl.style.display = 'block';
-        countNum.textContent = visible;
-    } else {
-        countEl.style.display = 'none';
-    }
+    // Centralizamos todo el filtrado (texto + chips) en una sola función
+    aplicarFiltrosChips();
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -967,17 +947,21 @@ function activarChip(btn, tipo) {
 }
 
 function aplicarFiltrosChips() {
-    const cards = document.querySelectorAll('.kanban-cards .kanban-card:not(.skeleton)');
-    let visible = 0;
+    const q = (document.getElementById('kanban-search')?.value || '').trim().toLowerCase();
+    const items = document.querySelectorAll('.kanban-cards .kanban-card:not(.skeleton), #leads-table-body tr');
+    let visibleCards = 0;
 
-    cards.forEach(card => {
-        const data = card._matchData;
-        if (!data) { card.style.display = ''; return; }
+    items.forEach(item => {
+        const data = item._matchData;
+        if (!data) { item.style.display = ''; return; }
 
         let mostrar = true;
 
+        // Filtro de texto
+        if (q && !item.textContent.toLowerCase().includes(q)) mostrar = false;
+
         // Filtro de precio
-        if (activeFilters.precio) {
+        if (activeFilters.precio && mostrar) {
             const p = data._precioNum || 0;
             if (p < activeFilters.precio.min || p > activeFilters.precio.max) mostrar = false;
         }
@@ -988,19 +972,22 @@ function aplicarFiltrosChips() {
             if (!texto.includes(activeFilters.zona)) mostrar = false;
         }
 
-        card.style.display = mostrar ? '' : 'none';
-        if (mostrar) visible++;
+        item.style.display = mostrar ? '' : 'none';
+        
+        if (mostrar && item.classList.contains('kanban-card')) {
+            visibleCards++;
+        }
     });
 
     // Actualizar contador de búsqueda
-    const hasFilter = activeFilters.precio || activeFilters.zona;
+    const hasFilter = activeFilters.precio || activeFilters.zona || q;
     const countEl = document.getElementById('search-count');
     const countNum = document.getElementById('search-count-num');
     if (hasFilter && countEl) {
         countEl.style.display = 'block';
-        countNum.textContent = visible;
-    } else if (!document.getElementById('kanban-search')?.value) {
-        if (countEl) countEl.style.display = 'none';
+        countNum.textContent = visibleCards;
+    } else if (countEl) {
+        countEl.style.display = 'none';
     }
 }
 
@@ -1125,11 +1112,97 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape') cerrarDrawer();
 });
 
-// Abrir drawer al hacer click en una tarjeta (sin drag)
+// Abrir drawer al hacer click en una tarjeta (sin drag) o en una fila de tabla
 document.addEventListener('click', e => {
     const card = e.target.closest('.kanban-card:not(.skeleton)');
-    if (!card) return;
+    const row = e.target.closest('#leads-table-body tr');
+    
+    const targetEl = card || row;
+    if (!targetEl) return;
+    
     if (e.target.closest('.btn-assign')) return; // no abrir si clickeó asignarme
-    if (card._dragged) return;                    // no abrir si fue un drag
-    abrirDrawer(card);
+    if (targetEl._dragged) return;               // no abrir si fue un drag
+    
+    abrirDrawer(targetEl);
 });
+
+/* ──────────────────────────────────────────────────────────────
+   📋  TABLE VIEW LOGIC
+────────────────────────────────────────────────────────────── */
+let currentSortCol = 'score';
+let currentSortDesc = true;
+let currentViewMode = 'board';
+
+window.toggleKanbanView = function(mode) {
+    currentViewMode = mode;
+    document.getElementById('btn-view-board').classList.toggle('active', mode === 'board');
+    document.getElementById('btn-view-table').classList.toggle('active', mode === 'table');
+    
+    const board = document.querySelector('.kanban-board');
+    const table = document.getElementById('kanban-table-container');
+    
+    if (mode === 'board') {
+        board.classList.remove('hide');
+        table.classList.remove('active');
+    } else {
+        board.classList.add('hide');
+        table.classList.add('active');
+        aplicarFiltro(); // Forzar render de la tabla
+    }
+};
+
+window.renderTable = function(data) {
+    const tbody = document.getElementById('leads-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    // Sort data
+    const sorted = [...data].sort((a, b) => {
+        let valA, valB;
+        if (currentSortCol === 'score') { valA = a._scoreNum; valB = b._scoreNum; }
+        else if (currentSortCol === 'cliente') { valA = (a._asesor || '').toLowerCase(); valB = (b._asesor || '').toLowerCase(); }
+        else if (currentSortCol === 'precio') { valA = a._precioNum; valB = b._precioNum; }
+        else if (currentSortCol === 'zona') { valA = (a._barrioLower || '').toLowerCase(); valB = (b._barrioLower || '').toLowerCase(); }
+        else if (currentSortCol === 'estado') { valA = (a._estadoNorm || '').toLowerCase(); valB = (b._estadoNorm || '').toLowerCase(); }
+        else if (currentSortCol === 'asesor') { valA = (a._asesorAsignado || '').toLowerCase(); valB = (b._asesorAsignado || '').toLowerCase(); }
+        
+        if (valA < valB) return currentSortDesc ? 1 : -1;
+        if (valA > valB) return currentSortDesc ? -1 : 1;
+        return 0;
+    });
+
+    sorted.forEach(d => {
+        const tr = document.createElement('tr');
+        tr._matchData = d;
+        
+        // Formateos
+        const scoreColor = d._scoreNum >= 90 ? '#10b981' : d._scoreNum >= 75 ? '#f59e0b' : '#7c3aed';
+        const scoreBg = d._scoreNum >= 90 ? '#d1fae5' : d._scoreNum >= 75 ? '#fef3c7' : '#ede9fe';
+        const precioTxt = d._precioNum > 0 ? 'USD ' + d._precioNum.toLocaleString('es-AR') : '–';
+        const zonasTxt = (d._barrioLower || d._zonas || '').substring(0, 30);
+        
+        tr.innerHTML = `
+            <td><span class="drawer-tag" style="background:${scoreBg};color:${scoreColor}">${d._scoreNum}</span></td>
+            <td style="font-weight:700">${d._asesor || 'Lead'}</td>
+            <td style="font-weight:800;color:var(--success)">${precioTxt}</td>
+            <td style="text-transform:capitalize">${zonasTxt}</td>
+            <td><span class="drawer-tag">${d._estadoNorm || 'Pendiente'}</span></td>
+            <td><span class="drawer-tag" style="background:var(--bg);color:var(--muted)">${d._asesorAsignado || 'Sin asignar'}</span></td>
+        `;
+        
+        tbody.appendChild(tr);
+    });
+
+    // Reaplicar filtros para ocular filas si hay búsqueda/chips activos
+    aplicarFiltrosChips();
+};
+
+window.sortTable = function(col) {
+    if (currentSortCol === col) {
+        currentSortDesc = !currentSortDesc;
+    } else {
+        currentSortCol = col;
+        currentSortDesc = true;
+    }
+    aplicarFiltro();
+};

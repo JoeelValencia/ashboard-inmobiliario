@@ -908,6 +908,95 @@
             color: var(--muted);
             flex-shrink: 0;
         }
+
+        /* ─── TABLE VIEW ─────────────────────────────────────── */
+        .view-toggle {
+            display: flex;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-left: auto; /* Empuja el toggle a la derecha */
+        }
+        .view-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--muted);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .view-toggle-btn.active {
+            background: var(--brand-light);
+            color: var(--brand);
+        }
+        .view-toggle-btn:hover:not(.active) {
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .kanban-table-view {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            background: var(--surface);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            margin-top: 16px;
+        }
+        .kanban-table-view.active {
+            display: block;
+        }
+        
+        .leads-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+        .leads-table th {
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            padding: 12px 16px;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: var(--muted);
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid var(--border);
+            z-index: 10;
+            cursor: pointer;
+            user-select: none;
+        }
+        .leads-table th:hover {
+            color: var(--text);
+            background: #f1f5f9;
+        }
+        .leads-table td {
+            padding: 14px 16px;
+            font-size: 13px;
+            color: var(--text);
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        .leads-table tbody tr {
+            transition: background 0.15s;
+            cursor: pointer;
+        }
+        .leads-table tbody tr:hover {
+            background: #f8fafc;
+        }
+        
+        /* Ocultar kanban board si la tabla está activa */
+        .kanban-board.hide {
+            display: none;
+        }
+
         .drawer-row-value {
             font-size: 12px;
             font-weight: 600;
@@ -1096,7 +1185,42 @@
                     <button class="filter-chip" data-zona="caballito" onclick="activarChip(this,'zona')">🏠 Caballito</button>
                     <button class="filter-chip" data-zona="gba" onclick="activarChip(this,'zona')">🗺️ GBA</button>
                 </div>
+
+                <!-- Toggle Vista (Board / Tabla) -->
+                <div class="view-toggle">
+                    <button class="view-toggle-btn active" id="btn-view-board" onclick="toggleKanbanView('board')">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
+                        </svg>
+                        Board
+                    </button>
+                    <button class="view-toggle-btn" id="btn-view-table" onclick="toggleKanbanView('table')">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                        </svg>
+                        Lista
+                    </button>
+                </div>
             </div>
+
+            <div class="kanban-table-view" id="kanban-table-container">
+                <table class="leads-table">
+                    <thead>
+                        <tr>
+                            <th onclick="sortTable('score')">Score ↕</th>
+                            <th onclick="sortTable('cliente')">Cliente ↕</th>
+                            <th onclick="sortTable('precio')">Precio ↕</th>
+                            <th onclick="sortTable('zona')">Zona ↕</th>
+                            <th onclick="sortTable('estado')">Estado ↕</th>
+                            <th onclick="sortTable('asesor')">Asesor ↕</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leads-table-body">
+                        <!-- Filas dinámicas -->
+                    </tbody>
+                </table>
+            </div>
+
 
             <div class="kanban-board">
 
